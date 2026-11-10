@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { getTelegramInitData, initializeTelegramWebApp } from "./telegram";
+import { getTelegramInitData, getTelegramUser, initializeTelegramWebApp, type TelegramUser } from "./telegram";
 import { apiUrl, appBaseUrl } from "./api";
 
 type Tournament = {
@@ -64,13 +64,13 @@ type Overview = {
   bracket: Match[];
 };
 
-type Tab = "home" | "tournament" | "matches" | "teams" | "profile";
+type Tab = "home" | "tournament" | "matches" | "rules" | "profile";
 
 const navigation: { id: Tab; label: string; icon: string }[] = [
   { id: "home", label: "Головна", icon: "bi-house-door" },
   { id: "tournament", label: "Турнір", icon: "bi-trophy" },
   { id: "matches", label: "Матчі", icon: "bi-controller" },
-  { id: "teams", label: "Команди", icon: "bi-people" },
+  { id: "rules", label: "Правила", icon: "bi-journal-text" },
   { id: "profile", label: "Профіль", icon: "bi-person" },
 ];
 
@@ -153,8 +153,8 @@ function App() {
         )}
         {overview && activeTab === "tournament" && <TournamentPage overview={overview} slotsLeft={slotsLeft} onRegister={() => { setSuccess(""); setFormError(""); setModalOpen(true); }} />}
         {overview && activeTab === "matches" && <MatchesPage matches={overview.matches} />}
-        {overview && activeTab === "teams" && <TeamsPage overview={overview} />}
-        {overview && activeTab === "profile" && <ProfilePage isAdmin={isAdmin} />}
+        {overview && activeTab === "rules" && <RulesPage />}
+        {overview && activeTab === "profile" && <ProfilePage isAdmin={isAdmin} user={getTelegramUser()} />}
       </main>
 
       <nav className="bottom-nav" aria-label="Основна навігація">
@@ -235,7 +235,7 @@ function HomePage({
         {nextMatch ? <MatchCard match={nextMatch} /> : <EmptyState text="Матчі з'являться після підтвердження команд і створення розкладу адміністратором." />}
       </section>
       <section className="content-section">
-        <SectionHeading title="Топ команд" action="Усі команди" onAction={() => onNavigate("teams")} />
+        <SectionHeading title="Топ команд" />
         {leaderboard.length ? (
           <div className="team-list compact-list">{leaderboard.slice(0, 3).map((team) => <TeamRow key={team.tag} team={team} />)}</div>
         ) : (
@@ -335,15 +335,41 @@ function MatchCard({ match }: { match: Match }) {
   );
 }
 
-function TeamsPage({ overview }: { overview: Overview }) {
+function RulesPage() {
   return (
     <>
-      <PageTitle eyebrow="CS2 · РЕЗУЛЬТАТИ" title="Команди" />
+      <PageTitle eyebrow="PROFCOM LNMU · CS2" title="Правила" />
       <section className="content-section first-section">
-        <SectionHeading title="Топ команд" />
-        {overview.leaderboard.length ? <div className="team-list">{overview.leaderboard.map((team) => <TeamRow key={team.tag} team={team} />)}</div> : <EmptyState text="Рейтинг з'явиться після підтвердження команд і результатів матчів." />}
+        <p className="rules-intro">Основні умови участі в турнірах PROFCOM LNMU.</p>
+        <div className="rules-list">
+          <RuleCard number="01" icon="bi-person-plus" title="Реєстрація та допуск">
+            Надішли заявку з даними команди. Участь у турнірі підтверджується адміністратором.
+          </RuleCard>
+          <RuleCard number="02" icon="bi-calendar-event" title="Формат і розклад">
+            Формат турніру, матчі та розклад публікуються на сторінці турніру. Перевіряй їх перед грою.
+          </RuleCard>
+          <RuleCard number="03" icon="bi-shield-check" title="Чесна гра">
+            Грай чесно та поважай суперників. Використання читів і навмисне порушення правил не допускаються.
+          </RuleCard>
+          <RuleCard number="04" icon="bi-trophy" title="Результати та рейтинг">
+            Результати матчів вносить адміністратор. Очки команд і таблиця оновлюються за результатами перемог.
+          </RuleCard>
+        </div>
+        <p className="rules-note">Додаткові умови конкретного турніру повідомляє його адміністратор.</p>
       </section>
     </>
+  );
+}
+
+function RuleCard({ number, icon, title, children }: { number: string; icon: string; title: string; children: string }) {
+  return (
+    <article className="rule-card">
+      <span className="rule-icon"><i className={`bi ${icon}`} aria-hidden="true" /></span>
+      <div className="rule-copy">
+        <div className="rule-heading"><h2>{title}</h2><span>{number}</span></div>
+        <p>{children}</p>
+      </div>
+    </article>
   );
 }
 
@@ -399,15 +425,33 @@ function Bracket({ matches }: { matches: Match[] }) {
   );
 }
 
-function ProfilePage({ isAdmin }: { isAdmin: boolean }) {
+function ProfilePage({ isAdmin, user }: { isAdmin: boolean; user: TelegramUser | null }) {
+  const fullName = user ? [user.first_name, user.last_name].filter(Boolean).join(" ") : "";
+
   return (
     <>
       <PageTitle eyebrow="PROFCOM LNMU · CS2" title="Профіль" />
       <section className="profile-card">
-        <span className="profile-avatar"><i className="bi bi-person" /></span>
-        <h2>Профіль гравця</h2>
-        <p>Підключення Telegram-профілю буде доступне у WebApp.</p>
-        {isAdmin && <a className="primary-button full-width" href={`${appBaseUrl}admin.html`}><i className="bi bi-shield-lock" /> Адмін-панель</a>}
+        <div className="profile-identity">
+          <span className={`profile-avatar ${user?.photo_url ? "has-photo" : ""}`}>
+            {user?.photo_url ? <img src={user.photo_url} alt="" /> : <i className="bi bi-person" />}
+          </span>
+          <div className="profile-name">
+            <h2>{user ? fullName : "Профіль гравця"}</h2>
+            <span className={`profile-status ${user ? "connected" : ""}`}>
+              <i /> {user ? "Telegram підключено" : "Telegram не підключено"}
+            </span>
+          </div>
+        </div>
+        {user ? (
+          <div className="profile-details">
+            {user.username && <DetailRow icon="bi-at" label="TELEGRAM" value={`@${user.username}`} />}
+            <DetailRow icon="bi-controller" label="СПІЛЬНОТА" value="PROFCOM LNMU · CS2" />
+          </div>
+        ) : (
+          <p className="profile-note">Відкрий цей застосунок через Telegram, щоб побачити дані свого профілю.</p>
+        )}
+        {isAdmin && <a className="primary-button full-width profile-admin-link" href={`${appBaseUrl}admin.html`}><i className="bi bi-shield-lock" /> Адмін-панель</a>}
       </section>
     </>
   );

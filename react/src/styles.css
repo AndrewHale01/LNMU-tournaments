@@ -108,11 +108,28 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .detail-row strong { text-align: right; font-size: 11px; font-weight: 600; }
 .list-action { width: 100%; min-height: 45px; padding: 0; display: flex; align-items: center; justify-content: space-between; border: 0; border-top: 1px solid var(--separator); background: transparent; color: var(--accent); font-size: 12px; text-align: left; cursor: pointer; }
 .list-action i { color: var(--muted); font-size: 12px; }
-.profile-card { padding: 22px 16px; display: flex; flex-direction: column; align-items: center; border: 1px solid var(--separator); border-radius: 15px; background: var(--surface); text-align: center; }
-.profile-avatar { width: 62px; height: 62px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-raised); color: var(--muted); font-size: 28px; }
-.profile-card h2 { margin: 11px 0 3px; font-size: 16px; }
-.profile-card p, .profile-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
-.profile-note { padding: 12px 8px; text-align: center; }
+.rules-intro { margin: -4px 2px 14px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.rules-list { display: flex; flex-direction: column; gap: 9px; }
+.rule-card { padding: 14px; display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--separator); border-radius: 13px; background: var(--surface); }
+.rule-icon { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; border-radius: 11px; background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); font-size: 16px; }
+.rule-copy { min-width: 0; flex: 1; }
+.rule-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.rule-heading h2 { margin: 1px 0 5px; font-size: 13px; font-weight: 650; }
+.rule-heading span { color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.rule-copy p, .rules-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.rules-note { margin: 13px 3px 0; }
+.profile-card { padding: 17px 15px; border: 1px solid var(--separator); border-radius: 15px; background: var(--surface); }
+.profile-identity { display: flex; align-items: center; gap: 13px; }
+.profile-avatar { width: 58px; height: 58px; flex: 0 0 58px; overflow: hidden; display: grid; place-items: center; border: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: 50%; background: var(--surface-raised); color: var(--muted); font-size: 25px; }
+.profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.profile-name { min-width: 0; }
+.profile-card h2 { margin: 0 0 5px; overflow-wrap: anywhere; font-size: 16px; }
+.profile-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; }
+.profile-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.profile-status.connected i { background: var(--success); }
+.profile-details { margin-top: 15px; padding: 0 10px; border: 1px solid var(--separator); border-radius: 12px; }
+.profile-note { margin: 15px 0 0; padding: 12px; border-radius: 10px; background: var(--surface-raised); color: var(--muted); font-size: 11px; line-height: 1.5; }
+.profile-admin-link { margin-top: 15px; }
 .empty-state { min-height: 84px; padding: 15px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 1px dashed #ffffff22; border-radius: 13px; color: var(--muted); font-size: 12px; text-align: center; }
 .empty-state i { font-size: 16px; }
 .loading-state { min-height: 55vh; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: 13px; }
