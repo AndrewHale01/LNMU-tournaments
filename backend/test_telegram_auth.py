@@ -72,6 +72,13 @@ class AdminAuthorizationTests(unittest.TestCase):
         self.assertEqual(handler.require_admin()["id"], 12345)
         self.assertEqual(handler.responses, [])
 
+    def test_allows_primary_admin_without_environment_id(self):
+        os.environ["TELEGRAM_ADMIN_IDS"] = ""
+        user = {"id": 5806282517, "first_name": "Primary admin"}
+        handler = self.Handler(signed_init_data(self.token, user))
+        self.assertEqual(handler.require_admin()["id"], 5806282517)
+        self.assertEqual(handler.responses, [])
+
     def test_rejects_valid_non_admin(self):
         os.environ["TELEGRAM_ADMIN_IDS"] = "99999"
         handler = self.Handler(self.init_data)

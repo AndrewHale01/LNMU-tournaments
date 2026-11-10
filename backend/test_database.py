@@ -65,7 +65,7 @@ class DatabaseConnectionTests(unittest.TestCase):
                         "tag": tag,
                         "captain": "Captain",
                         "contact": "contact",
-                    })
+                    }, {"id": 1000 + len(team_ids), "username": f"captain{len(team_ids)}"})
                     self.assertEqual(status, 201)
                     team_ids.append(result["team"]["id"])
 
@@ -90,6 +90,90 @@ class DatabaseConnectionTests(unittest.TestCase):
                 overview = server.get_overview()
                 self.assertEqual(overview["leaderboard"][0]["tag"], "AAA")
                 self.assertEqual(overview["leaderboard"][0]["points"], 3)
+
+    def test_telegram_roster_invites_and_temporary_access_restrictions(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            database = Path(temporary_directory) / "tournament.sqlite3"
+            with patch.object(server, "DATABASE", database), patch.dict("os.environ", {"DATABASE_URL": ""}):
+                server.initialize_database()
+                handler = object.__new__(server.APIHandler)
+                handler.create_tournament({
+                    "name": "Test tournament",
+                    "logo_url": "",
+                    "start_date": "2026-11-10",
+                    "end_date": "2026-11-11",
+                    "format": "both",
+                    "team_limit": 8,
+                    "prize_pool": 0,
+                    "win_points": 3,
+                })
+
+                status, result = handler.register_team({
+                    "name": "Team Alpha",
+                    "tag": "ALPHA",
+                    "captain": "Captain",
+                    "contact": "@captain",
+                    "players": "@player_one",
+                }, {"id": 1001, "username": "captain"})
+                self.assertEqual(status, 201)
+                self.assertNotIn("telegram_user_id", result["team"])
+
+                invitations = handler.get_player_invitations({"id": 2002, "username": "player_one"})
+                self.assertEqual(len(invitations["invitations"]), 1)
+                invitation_id = invitations["invitations"][0]["id"]
+                self.assertEqual(
+                    handler.accept_player_invitation(
+                        {"invitation_id": invitation_id},
+                        {"id": 2002, "username": "player_one"},
+                    )[0],
+                    200,
+                )
+
+                admin_overview = handler.get_admin_overview()
+                player_ids = {player["telegram_user_id"] for player in admin_overview["players"]}
+                self.assertEqual(player_ids, {1001, 2002})
+                handler.review_team(result["team"]["id"], "approve")
+                public_overview = server.get_overview()
+                self.assertNotIn("telegram_user_id", repr(public_overview))
+                self.assertNotIn("players", public_overview)
+
+                self.assertEqual(
+                    handler.update_player_ban(2002, "ban", {"reason": "Порушення правил", "duration": "1d"}, 1001)[0],
+                    200,
+                )
+                sanction = handler.get_active_sanction(2002)
+                self.assertIsNotNone(sanction)
+                self.assertEqual(sanction["reason"], "Порушення правил")
+                self.assertNotIn("telegram_user_id", handler.get_player_status({"id": 2002})["sanction"])
+                self.assertNotIn("telegram_user_id", handler.get_player_invitations({"id": 2002, "username": "player_one"})["ban"])
+
+                self.assertEqual(
+                    handler.accept_player_invitation(
+                        {"invitation_id": invitation_id},
+                        {"id": 2002, "username": "player_one"},
+                    )[0],
+                    403,
+                )
+                self.assertEqual(
+                    handler.register_team({
+                        "name": "Team Blocked",
+                        "tag": "BLOCK",
+                        "captain": "Blocked player",
+                        "contact": "@blocked",
+                    }, {"id": 2002, "username": "player_one"})[0],
+                    403,
+                )
+                with server.connect_db() as connection:
+                    connection.execute(
+                        "UPDATE player_bans SET expires_at = ? WHERE telegram_user_id = ?",
+                        ("2000-01-01T00:00:00+00:00", 2002),
+                    )
+                self.assertIsNone(handler.get_active_sanction(2002))
+                self.assertFalse(next(
+                    ban for ban in handler.get_admin_overview()["bans"]
+                    if ban["telegram_user_id"] == 2002
+                )["active"])
+                self.assertEqual(handler.update_player_ban(2002, "unban", {}, 1001)[0], 200)
 
     def test_postgres_adapter_translates_placeholders_and_returns_inserted_id(self):
         class FakeCursor:

@@ -53,11 +53,13 @@ Render's free API service can sleep after 15 minutes without traffic, so its fir
 
 After GitHub Pages is live, configure the bot's Web App/menu button in BotFather with the site's HTTPS URL. The public frontend opens inside Telegram; it calls the Python API separately over HTTPS. Cross-origin API requests are allowed only from the origin configured in `FRONTEND_ORIGINS`.
 
-Admin access is verified on the Python server from Telegram WebApp `initData`. Set the bot token and the comma-separated numeric Telegram user IDs allowed to administer tournaments in the Render environment:
+Admin access is verified on the Python server from Telegram WebApp `initData`. Set the bot token in Render's environment:
 
-Get the bot token from BotFather and keep it only in Render's environment—never in React code or a committed file. Rotate the bot token first if it was previously stored in project source. Add the administrator's numeric Telegram user ID (not username) to `TELEGRAM_ADMIN_IDS`. Open the WebApp in Telegram and use **Профіль → Адмін-панель**; that link appears only for configured admins. Directly opening `/admin.html` in a regular browser does not authenticate. The server validates Telegram's signature, limits `initData` to 24 hours, and checks the signed numeric user ID against `TELEGRAM_ADMIN_IDS`.
+Get the bot token from BotFather and keep it only in Render's environment—never in React code or a committed file. Rotate the bot token first if it was previously stored in project source. Telegram ID `5806282517` is the primary administrator; add any additional numeric Telegram user IDs (comma-separated, not usernames) to `TELEGRAM_ADMIN_IDS`. Open the WebApp in Telegram and use **Профіль → Адмін-панель**. Directly opening `/admin.html` in a regular browser does not authenticate. The server validates Telegram's signature and limits `initData` to 24 hours.
 
-Admins create the tournament and choose whether it has standings, a playoff bracket, or both. They can approve applications, schedule matches, and enter match results. Standings and leaderboard points are calculated from completed match wins using the tournament's configured points-per-win value. The public schedule and team list start empty.
+Admins create the tournament and choose whether it has standings, a playoff bracket, or both. They can approve applications, schedule matches, and enter match results. Standings and leaderboard points are calculated from completed match wins using the tournament's configured points-per-win value. Team captains can invite up to four additional players by Telegram username. Each invited player must accept in their Telegram profile; only then does the admin panel display their Telegram ID. IDs are not included in public API responses or player views.
+
+Admins can impose permanent or 1-, 7-, or 30-day access restrictions and provide a reason. The server checks signed Telegram identity on WebApp entry and hides the application while a restriction is active. Expired and lifted restrictions remain in the admin history.
 
 ## Production build
 

@@ -15,6 +15,18 @@
 .admin-list { overflow: hidden; border: 1px solid var(--separator); border-radius: 12px; background: var(--surface); }
 .admin-row { min-height: 62px; padding: 9px 11px; display: flex; align-items: center; gap: 8px; }
 .admin-row + .admin-row { border-top: 1px solid var(--separator); }
+.admin-help { margin: -4px 0 9px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.admin-player-row { padding: 11px; display: flex; flex-direction: column; gap: 9px; }
+.admin-player-row + .admin-player-row { border-top: 1px solid var(--separator); }
+.admin-player-identity { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.admin-player-identity strong { overflow-wrap: anywhere; font-size: 11px; }
+.admin-player-identity small, .admin-sanction small { color: var(--muted); font-size: 9px; line-height: 1.45; }
+.admin-player-identity code { color: var(--accent); font-size: 10px; }
+.admin-sanction { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+.admin-sanction-form { display: grid; grid-template-columns: minmax(0, 1fr) 85px 31px; align-items: center; gap: 6px; }
+.admin-sanction-form input, .admin-sanction-form select { width: 100%; min-width: 0; height: 34px; padding: 0 8px; border: 1px solid var(--separator); border-radius: 8px; background: var(--background); color: var(--text); font-size: 10px; }
+.admin-sanction-form button { width: 31px; height: 31px; display: grid; place-items: center; border: 0; border-radius: 9px; background: #f166661a; color: #ff8585; cursor: pointer; }
+.admin-sanction-form button:disabled { opacity: .5; cursor: wait; }
 .admin-row-actions { display: flex; gap: 6px; }
 .approve-button, .reject-button { width: 31px; height: 31px; flex: 0 0 31px; display: grid; place-items: center; border: 0; border-radius: 9px; cursor: pointer; }
 .approve-button { background: #40c98020; color: var(--success); }

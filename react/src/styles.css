@@ -130,6 +130,23 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .profile-details { margin-top: 15px; padding: 0 10px; border: 1px solid var(--separator); border-radius: 12px; }
 .profile-note { margin: 15px 0 0; padding: 12px; border-radius: 10px; background: var(--surface-raised); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .profile-admin-link { margin-top: 15px; }
+.player-invitations { margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--separator); }
+.player-invitations h3 { margin: 0 0 8px; font-size: 12px; }
+.player-invitation { min-height: 45px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.player-invitation + .player-invitation { border-top: 1px solid var(--separator); }
+.player-invitation > span { display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
+.player-invitation small, .invitation-message, .registration-form .field-note { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.invitation-message { margin: 8px 0 0; }
+.registration-form textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--separator); border-radius: 10px; outline: none; resize: vertical; background: var(--background); color: var(--text); font: inherit; font-size: 13px; letter-spacing: 0; }
+.registration-form textarea:focus { border-color: var(--accent); }
+.registration-form textarea::placeholder { color: var(--muted); opacity: .7; }
+.registration-form .field-note { margin: -7px 0 0; }
+.access-blocked { min-height: 65vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.blocked-icon { width: 62px; height: 62px; margin-bottom: 20px; display: grid; place-items: center; border: 1px solid #f1666645; border-radius: 20px; background: #f1666612; color: #ff8585; font-size: 26px; }
+.access-blocked h1 { margin: 8px 0; font-size: 22px; }
+.access-blocked p { max-width: 360px; margin: 4px 0 12px; color: var(--text); font-size: 13px; line-height: 1.5; }
+.access-blocked small, .blocked-help { max-width: 360px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.blocked-help { margin-top: 18px; }
 .empty-state { min-height: 84px; padding: 15px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 1px dashed #ffffff22; border-radius: 13px; color: var(--muted); font-size: 12px; text-align: center; }
 .empty-state i { font-size: 16px; }
 .loading-state { min-height: 55vh; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: 13px; }

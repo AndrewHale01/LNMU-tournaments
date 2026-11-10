@@ -28,7 +28,35 @@ type Match = {
   score_b: number | null;
 };
 
-type AdminOverview = { tournament: Tournament | null; teams: Team[]; matches: Match[] };
+type AdminPlayer = {
+  id: number;
+  team_id: number;
+  telegram_user_id: number | null;
+  invited_username: string;
+  username: string;
+  status: "invited" | "active";
+  is_captain: number;
+  team_name: string;
+  team_tag: string;
+};
+
+type PlayerSanction = {
+  telegram_user_id: number;
+  username: string;
+  reason: string;
+  created_at: string;
+  expires_at: string | null;
+  lifted_at: string | null;
+  active: boolean;
+};
+
+type AdminOverview = {
+  tournament: Tournament | null;
+  teams: Team[];
+  matches: Match[];
+  players: AdminPlayer[];
+  bans: PlayerSanction[];
+};
 type Payload = Record<string, unknown>;
 
 export default function AdminApp() {
@@ -111,6 +139,11 @@ export default function AdminApp() {
 
   const pendingTeams = overview?.teams.filter((team) => team.status === "pending") ?? [];
   const approvedTeams = overview?.teams.filter((team) => team.status === "approved") ?? [];
+  const activeSanctions = new Map(
+    (overview?.bans ?? [])
+      .filter((sanction) => sanction.active)
+      .map((sanction) => [sanction.telegram_user_id, sanction]),
+  );
 
   return (
     <div className="app-shell admin-shell">
@@ -136,6 +169,35 @@ export default function AdminApp() {
             </div>
             {error && <div className="form-error admin-notice" role="alert">{error}</div>}
             {notice && <div className="admin-success admin-notice" role="status">{notice}</div>}
+            <section className="content-section">
+              <SectionHeading title={`Гравці та блокування (${overview.players.length})`} />
+              <p className="admin-help">Telegram ID бачать лише адміністратори. Запрошені гравці з'являться тут після підтвердження у WebApp.</p>
+              <div className="admin-list">
+                {overview.players.map((player) => {
+                  const sanction = player.telegram_user_id ? activeSanctions.get(player.telegram_user_id) : undefined;
+                  return (
+                    <AdminPlayerRow
+                      key={player.id}
+                      player={player}
+                      sanction={sanction}
+                      busy={busy}
+                      onBan={(payload) => run(
+                        () => request(`players/${player.telegram_user_id}/ban`, payload),
+                        `Обмеження для @${player.username || player.invited_username} застосовано.`,
+                      )}
+                      onUnban={() => run(
+                        () => request(`players/${player.telegram_user_id}/unban`),
+                        `Обмеження для @${player.username || player.invited_username} знято.`,
+                      )}
+                    />
+                  );
+                })}
+                {!overview.players.length && <EmptyState text="Підтверджених гравців у складах поки немає." />}
+              </div>
+              {overview.bans.some((sanction) => !sanction.active) && (
+                <p className="admin-help">Завершені або зняті обмеження залишаються в історії для адміністраторів.</p>
+              )}
+            </section>
             <AdminForm title="Створити турнір" busy={busy} submitLabel="СТВОРИТИ ТУРНІР" onSubmit={(payload) => run(
               () => request("tournaments", payload),
               "Турнір створено.",
@@ -232,6 +294,59 @@ function AdminForm({ title, children, busy, submitLabel, onSubmit }: {
     if (await onSubmit(Object.fromEntries(new FormData(form).entries()))) form.reset();
   }
   return <section className="admin-card"><h2>{title}</h2><form className="admin-form" onSubmit={submit}>{children}<button className="primary-button full-width" disabled={busy}>{submitLabel} <i className="bi bi-arrow-right" /></button></form></section>;
+}
+
+function AdminPlayerRow({
+  player,
+  sanction,
+  busy,
+  onBan,
+  onUnban,
+}: {
+  player: AdminPlayer;
+  sanction?: PlayerSanction;
+  busy: boolean;
+  onBan: (payload: Payload) => Promise<boolean>;
+  onUnban: () => Promise<boolean>;
+}) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (await onBan(Object.fromEntries(new FormData(form).entries()))) form.reset();
+  }
+
+  return (
+    <div className="admin-player-row">
+      <div className="admin-player-identity">
+        <strong>{player.username || player.invited_username ? `@${player.username || player.invited_username}` : "Гравець без username"} {player.is_captain ? "· капітан" : ""}</strong>
+        <small>{player.team_tag} · {player.team_name}</small>
+        {player.telegram_user_id ? (
+          <code>Telegram ID: {player.telegram_user_id}</code>
+        ) : (
+          <small>Запрошення очікує підтвердження</small>
+        )}
+      </div>
+      {player.telegram_user_id && (
+        sanction ? (
+          <div className="admin-sanction">
+            <small>{sanction.expires_at ? `До ${new Intl.DateTimeFormat("uk-UA", { dateStyle: "short", timeStyle: "short" }).format(new Date(sanction.expires_at))}` : "Постійне обмеження"} · {sanction.reason}</small>
+            <button type="button" className="approve-button" disabled={busy} onClick={() => void onUnban()} aria-label={`Зняти обмеження з ${player.username}`}><i className="bi bi-unlock" /></button>
+          </div>
+        ) : (
+          <form className="admin-sanction-form" onSubmit={(event) => void submit(event)}>
+            <input name="reason" required maxLength={300} placeholder="Причина обмеження" aria-label="Причина обмеження" />
+            <select name="duration" defaultValue="permanent" aria-label="Тривалість обмеження">
+              <option value="permanent">Постійно</option>
+              <option value="1d">1 день</option>
+              <option value="7d">7 днів</option>
+              <option value="30d">30 днів</option>
+            </select>
+            <button type="submit" className="reject-button" disabled={busy} aria-label={`Застосувати обмеження до ${player.username}`}><i className="bi bi-slash-circle" /></button>
+          </form>
+        )
+      )}
+    </div>
+  );
 }
 
 function ResultForm({ match, busy, onSubmit }: { match: Match; busy: boolean; onSubmit: (payload: Payload) => Promise<boolean> }) {

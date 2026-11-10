@@ -64,6 +64,11 @@ type Overview = {
   bracket: Match[];
 };
 
+type PlayerSanction = {
+  reason: string;
+  expires_at: string | null;
+};
+
 type Tab = "home" | "tournament" | "matches" | "rules" | "profile";
 
 const navigation: { id: Tab; label: string; icon: string }[] = [
@@ -85,6 +90,7 @@ function App() {
   const [formError, setFormError] = useState("");
   const [success, setSuccess] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [playerSanction, setPlayerSanction] = useState<PlayerSanction | null>(null);
   async function refreshOverview() {
     const response = await fetch(apiUrl("/api/overview"));
     if (!response.ok) throw new Error("Не вдалося завантажити дані турніру.");
@@ -93,13 +99,33 @@ function App() {
 
   useEffect(() => {
     initializeTelegramWebApp();
-    refreshOverview().catch((error: Error) => setLoadError(error.message));
     const initData = getTelegramInitData();
-    if (initData) {
-      fetch(apiUrl("/api/admin/session"), { headers: { "X-Telegram-Init-Data": initData } })
-        .then((response) => { if (response.ok) setIsAdmin(true); })
-        .catch(() => setIsAdmin(false));
+    let active = true;
+    async function loadApp() {
+      try {
+        if (initData) {
+          const statusResponse = await fetch(apiUrl("/api/player/status"), {
+            headers: { "X-Telegram-Init-Data": initData },
+          });
+          const status = await statusResponse.json();
+          if (!statusResponse.ok) throw new Error(status.error ?? "Не вдалося перевірити доступ.");
+          if (!active) return;
+          if (status.sanction) {
+            setPlayerSanction(status.sanction as PlayerSanction);
+            return;
+          }
+          const adminResponse = await fetch(apiUrl("/api/admin/session"), {
+            headers: { "X-Telegram-Init-Data": initData },
+          });
+          if (active && adminResponse.ok) setIsAdmin(true);
+        }
+        await refreshOverview();
+      } catch (error) {
+        if (active) setLoadError(error instanceof Error ? error.message : "Не вдалося завантажити застосунок.");
+      }
     }
+    void loadApp();
+    return () => { active = false; };
   }, []);
 
   async function registerTeam(event: FormEvent<HTMLFormElement>) {
@@ -112,7 +138,7 @@ function App() {
     try {
       const response = await fetch(apiUrl("/api/teams"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Telegram-Init-Data": getTelegramInitData() },
         body: JSON.stringify(Object.fromEntries(new FormData(form).entries())),
       });
       const result = await response.json();
@@ -129,6 +155,27 @@ function App() {
   const tournament = overview?.tournament ?? null;
   const placesTaken = tournament ? tournament.registered_teams + tournament.pending_teams : 0;
   const slotsLeft = tournament ? Math.max(tournament.team_limit - placesTaken, 0) : 0;
+
+  if (playerSanction) {
+    return (
+      <div className="app-shell">
+        <header className="app-header">
+          <span className="brand"><span className="brand-icon"><i className="bi bi-shield-lock" /></span><span>PROFCOM <b>LNMU</b></span></span>
+          <span className="game-label">CS2 · ДОСТУП ОБМЕЖЕНО</span>
+        </header>
+        <main className="app-content">
+          <section className="access-blocked">
+            <span className="blocked-icon"><i className="bi bi-person-fill-lock" /></span>
+            <span className="eyebrow">ДОСТУП ОБМЕЖЕНО</span>
+            <h1>{playerSanction.expires_at ? "Тимчасове обмеження" : "Доступ заблоковано"}</h1>
+            <p>{playerSanction.reason}</p>
+            {playerSanction.expires_at && <small>Доступ буде відновлено: {new Intl.DateTimeFormat("uk-UA", { dateStyle: "long", timeStyle: "short" }).format(new Date(playerSanction.expires_at))}</small>}
+            <span className="blocked-help">Якщо вважаєш, що це помилка, звернися до адміністратора турніру.</span>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -191,6 +238,10 @@ function App() {
                 <label>ТЕГ КОМАНДИ<input name="tag" required maxLength={8} placeholder="KYIV" /></label>
                 <label>STEAM НІК КАПІТАНА<input name="captain" required maxLength={60} placeholder="Твій ігровий нік" /></label>
                 <label>TELEGRAM ДЛЯ ЗВ'ЯЗКУ<input name="contact" required maxLength={80} placeholder="@username" /></label>
+                <label>TELEGRAM USERNAME ГРАВЦІВ
+                  <textarea name="players" rows={3} maxLength={160} placeholder="@player_one, @player_two" />
+                </label>
+                <p className="field-note">Додай до 4 гравців. Кожен підтвердить запрошення у своєму Telegram. Їхні ID бачить лише адміністратор.</p>
                 {formError && <div className="form-error" role="alert">{formError}</div>}
                 <button className="primary-button full-width" disabled={submitting || !tournament || slotsLeft === 0}>
                   {submitting ? "НАДСИЛАЄМО…" : !tournament ? "НЕМАЄ АКТИВНОГО ТУРНІРУ" : slotsLeft === 0 ? "ВІЛЬНИХ МІСЦЬ НЕМАЄ" : "НАДІСЛАТИ ЗАЯВКУ"} <i className="bi bi-arrow-right" />
@@ -427,6 +478,45 @@ function Bracket({ matches }: { matches: Match[] }) {
 
 function ProfilePage({ isAdmin, user }: { isAdmin: boolean; user: TelegramUser | null }) {
   const fullName = user ? [user.first_name, user.last_name].filter(Boolean).join(" ") : "";
+  const [invitations, setInvitations] = useState<{ id: number; team_name: string; team_tag: string }[]>([]);
+  const [invitationMessage, setInvitationMessage] = useState("");
+  const [acceptingInvitation, setAcceptingInvitation] = useState(false);
+
+  useEffect(() => {
+    const initData = getTelegramInitData();
+    if (!user || !initData) return;
+    let active = true;
+    fetch(apiUrl("/api/player/invitations"), { headers: { "X-Telegram-Init-Data": initData } })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? "Не вдалося завантажити запрошення.");
+        if (active) setInvitations(result.invitations);
+      })
+      .catch((error: unknown) => {
+        if (active) setInvitationMessage(error instanceof Error ? error.message : "Не вдалося завантажити запрошення.");
+      });
+    return () => { active = false; };
+  }, [user]);
+
+  async function acceptInvitation(invitationId: number) {
+    setAcceptingInvitation(true);
+    setInvitationMessage("");
+    try {
+      const response = await fetch(apiUrl("/api/player/invitations/accept"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Telegram-Init-Data": getTelegramInitData() },
+        body: JSON.stringify({ invitation_id: invitationId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Не вдалося прийняти запрошення.");
+      setInvitations((current) => current.filter((invitation) => invitation.id !== invitationId));
+      setInvitationMessage("Ти приєднався до складу команди.");
+    } catch (error) {
+      setInvitationMessage(error instanceof Error ? error.message : "Не вдалося прийняти запрошення.");
+    } finally {
+      setAcceptingInvitation(false);
+    }
+  }
 
   return (
     <>
@@ -450,6 +540,20 @@ function ProfilePage({ isAdmin, user }: { isAdmin: boolean; user: TelegramUser |
           </div>
         ) : (
           <p className="profile-note">Відкрий цей застосунок через Telegram, щоб побачити дані свого профілю.</p>
+        )}
+        {Boolean(invitations.length || invitationMessage) && (
+          <section className="player-invitations" aria-labelledby="invitations-title">
+            <h3 id="invitations-title">Запрошення до команди</h3>
+            {invitations.map((invitation) => (
+              <div className="player-invitation" key={invitation.id}>
+                <span><strong>{invitation.team_name}</strong><small>{invitation.team_tag}</small></span>
+                <button className="approve-button" disabled={acceptingInvitation} onClick={() => void acceptInvitation(invitation.id)} aria-label={`Приєднатися до ${invitation.team_name}`}>
+                  <i className="bi bi-check-lg" />
+                </button>
+              </div>
+            ))}
+            {invitationMessage && <p className="invitation-message" role="status">{invitationMessage}</p>}
+          </section>
         )}
         {isAdmin && <a className="primary-button full-width profile-admin-link" href={`${appBaseUrl}admin.html`}><i className="bi bi-shield-lock" /> Адмін-панель</a>}
       </section>
