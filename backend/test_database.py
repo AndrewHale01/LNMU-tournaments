@@ -1,3 +1,4 @@
+import base64
 import sqlite3
 import tempfile
 import unittest
@@ -8,6 +9,19 @@ import server
 
 
 class DatabaseConnectionTests(unittest.TestCase):
+    def test_logo_validation_accepts_supported_image_and_rejects_invalid_data(self):
+        webp = base64.b64encode(b"RIFF\x04\x00\x00\x00WEBP").decode("ascii")
+        data_url = f"data:image/webp;base64,{webp}"
+        self.assertEqual(server.APIHandler.clean_logo(data_url), data_url)
+        self.assertEqual(server.APIHandler.clean_logo("https://example.com/logo.png"), "https://example.com/logo.png")
+        with self.assertRaises(ValueError):
+            server.APIHandler.clean_logo("data:image/png;base64,not-an-image")
+        with self.assertRaises(ValueError):
+            server.APIHandler.clean_logo("javascript:alert(1)")
+        oversized = base64.b64encode(b"RIFF" + b"\x00" * server.MAX_LOGO_BYTES + b"WEBP").decode("ascii")
+        with self.assertRaises(ValueError):
+            server.APIHandler.clean_logo(f"data:image/webp;base64,{oversized}")
+
     def test_sqlite_schema_initializes_and_enforces_case_insensitive_tags(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             database = Path(temporary_directory) / "tournament.sqlite3"

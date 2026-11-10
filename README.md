@@ -59,6 +59,8 @@ Get the bot token from BotFather and keep it only in Render's environment—neve
 
 Admins create the tournament and choose whether it has standings, a playoff bracket, or both. They can approve applications, schedule matches, and enter match results. Standings and leaderboard points are calculated from completed match wins using the tournament's configured points-per-win value. Team captains can invite up to four additional players by Telegram username. Each invited player must accept in their Telegram profile; only then does the admin panel display their Telegram ID. IDs are not included in public API responses or player views.
 
+When creating a tournament, admins may provide a logo URL or choose a PNG, JPEG, or WebP image from the device gallery. The browser resizes and converts uploaded images to WebP (up to 512 KB); the API validates the image and stores it in the database.
+
 Admins can impose permanent or 1-, 7-, or 30-day access restrictions and provide a reason. The server checks signed Telegram identity on WebApp entry and hides the application while a restriction is active. Expired and lifted restrictions remain in the admin history.
 
 ## Production build

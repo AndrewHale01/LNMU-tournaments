@@ -1,3 +1,5 @@
+import base64
+import binascii
 import json
 import logging
 import os
@@ -18,6 +20,8 @@ HOST = os.environ.get("HOST", "0.0.0.0" if "PORT" in os.environ else "127.0.0.1"
 PORT = int(os.environ.get("PORT", "8000"))
 logger = logging.getLogger("profcom_lnmu.api")
 PRIMARY_ADMIN_ID = 5806282517
+MAX_LOGO_BYTES = 512 * 1024
+MAX_REQUEST_BYTES = 768 * 1024
 
 
 class DatabaseConnection:
@@ -353,7 +357,8 @@ class APIHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        payload = self.read_payload()
+        max_bytes = MAX_REQUEST_BYTES if path == "/api/admin/tournaments" else 16_384
+        payload = self.read_payload(max_bytes=max_bytes)
         if payload is None:
             return
         if path == "/api/teams":
@@ -375,13 +380,13 @@ class APIHandler(BaseHTTPRequestHandler):
             status, result = error_response("Маршрут не знайдено.", 404)
         self.send_json(status, result)
 
-    def read_payload(self):
+    def read_payload(self, max_bytes=16_384):
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             self.send_json(400, {"error": "Некоректний розмір запиту."})
             return None
-        if content_length <= 0 or content_length > 16_384:
+        if content_length <= 0 or content_length > max_bytes:
             self.send_json(400, {"error": "Некоректний розмір запиту."})
             return None
         try:
@@ -762,7 +767,7 @@ class APIHandler(BaseHTTPRequestHandler):
 
     def create_tournament(self, payload):
         name = self.clean_string(payload, "name", 100)
-        logo_url = self.clean_string(payload, "logo_url", 500, required=False)
+        logo_url = self.clean_logo(payload.get("logo_url", ""))
         start_date = self.clean_string(payload, "start_date", 10)
         end_date = self.clean_string(payload, "end_date", 10)
         try:
@@ -800,6 +805,36 @@ class APIHandler(BaseHTTPRequestHandler):
             )
             created = dict(connection.execute("SELECT * FROM tournaments WHERE id = ?", (tournament_id,)).fetchone())
         return 201, {"tournament": created}
+
+    @staticmethod
+    def clean_logo(value):
+        if not isinstance(value, str):
+            raise ValueError("Логотип має бути посиланням або зображенням.")
+        value = value.strip()
+        if not value:
+            return ""
+        if value.startswith("data:"):
+            match = re.fullmatch(r"data:image/(png|jpeg|webp);base64,([A-Za-z0-9+/]*={0,2})", value)
+            if not match or len(value) > MAX_LOGO_BYTES * 4 // 3 + 128:
+                raise ValueError("Логотип має бути PNG, JPEG або WebP розміром до 512 КБ.")
+            try:
+                image_bytes = base64.b64decode(match.group(2), validate=True)
+            except (binascii.Error, ValueError) as error:
+                raise ValueError("Не вдалося прочитати файл логотипа.") from error
+            image_type = match.group(1)
+            valid_signature = (
+                image_type == "png" and image_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+                or image_type == "jpeg" and image_bytes.startswith(b"\xff\xd8\xff")
+                or image_type == "webp" and image_bytes.startswith(b"RIFF") and image_bytes[8:12] == b"WEBP"
+            )
+            if len(image_bytes) > MAX_LOGO_BYTES or not valid_signature:
+                raise ValueError("Файл має бути коректним PNG, JPEG або WebP зображенням до 512 КБ.")
+            return value
+
+        parsed_url = urlparse(value)
+        if len(value) > 2_048 or parsed_url.scheme not in ("http", "https") or not parsed_url.netloc:
+            raise ValueError("Вкажи посилання на логотип або завантаж зображення PNG, JPEG чи WebP.")
+        return value
 
     def review_team(self, team_id, decision):
         new_status = "approved" if decision == "approve" else "rejected"

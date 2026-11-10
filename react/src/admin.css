@@ -10,6 +10,10 @@
 .admin-form label, .admin-login label { min-width: 0; display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 9px; font-weight: 650; letter-spacing: .045em; }
 .admin-form input, .admin-form select, .admin-login input { width: 100%; min-width: 0; height: 40px; padding: 0 10px; border: 1px solid var(--separator); border-radius: 9px; outline: none; background: var(--background); color: var(--text); font-size: 12px; }
 .admin-form input:focus, .admin-form select:focus, .admin-login input:focus { border-color: var(--accent); }
+.admin-form .logo-file-picker { padding: 10px; border: 1px solid var(--separator); border-radius: 10px; background: var(--background); }
+.admin-form .logo-file-picker input[type="file"] { height: auto; padding: 5px 0; border: 0; background: transparent; font-size: 10px; }
+.logo-file-picker small { color: var(--muted); font-size: 9px; font-weight: 400; letter-spacing: 0; line-height: 1.4; text-transform: none; }
+.logo-file-preview { width: 58px; height: 58px; border-radius: 10px; object-fit: cover; }
 .admin-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .field-note { margin: -4px 0 0; color: var(--muted); font-size: 10px; }
 .admin-list { overflow: hidden; border: 1px solid var(--separator); border-radius: 12px; background: var(--surface); }

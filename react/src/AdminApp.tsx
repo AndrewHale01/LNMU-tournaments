@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { getTelegramInitData, initializeTelegramWebApp } from "./telegram";
 import { apiUrl, appBaseUrl } from "./api";
 
@@ -203,7 +203,8 @@ export default function AdminApp() {
               "Турнір створено.",
             )}>
               <label>НАЗВА ТУРНІРУ<input name="name" required maxLength={100} placeholder="Назва турніру" /></label>
-              <label>URL ЛОГОТИПА<input name="logo_url" type="url" maxLength={500} placeholder="https://…" /></label>
+              <label>URL ЛОГОТИПА (НЕОБОВ'ЯЗКОВО)<input name="logo_url" type="url" maxLength={2048} placeholder="https://…" /></label>
+              <LogoFilePicker />
               <div className="admin-form-grid">
                 <label>ПОЧАТОК<input name="start_date" type="date" required /></label>
                 <label>ЗАВЕРШЕННЯ<input name="end_date" type="date" required /></label>
@@ -288,12 +289,109 @@ function AdminForm({ title, children, busy, submitLabel, onSubmit }: {
   submitLabel: string;
   onSubmit: (payload: Payload) => Promise<boolean>;
 }) {
+  const [formError, setFormError] = useState("");
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    if (await onSubmit(Object.fromEntries(new FormData(form).entries()))) form.reset();
+    setFormError("");
+    try {
+      const payload = Object.fromEntries(new FormData(form).entries());
+      const fileInput = form.querySelector<HTMLInputElement>('input[name="logo_file"]');
+      const image = fileInput?.files?.[0];
+      delete payload.logo_file;
+      if (image) payload.logo_url = await optimizeLogo(image);
+      if (await onSubmit(payload)) form.reset();
+    } catch (submitError) {
+      setFormError(submitError instanceof Error ? submitError.message : "Не вдалося підготувати логотип.");
+    }
   }
-  return <section className="admin-card"><h2>{title}</h2><form className="admin-form" onSubmit={submit}>{children}<button className="primary-button full-width" disabled={busy}>{submitLabel} <i className="bi bi-arrow-right" /></button></form></section>;
+  return <section className="admin-card"><h2>{title}</h2><form className="admin-form" onSubmit={submit}>{children}{formError && <div className="form-error" role="alert">{formError}</div>}<button className="primary-button full-width" disabled={busy}>{submitLabel} <i className="bi bi-arrow-right" /></button></form></section>;
+}
+
+function LogoFilePicker() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [fileName, setFileName] = useState("");
+
+  useEffect(() => {
+    const form = inputRef.current?.form;
+    function resetPicker() {
+      setPreviewUrl("");
+      setFileName("");
+    }
+    form?.addEventListener("reset", resetPicker);
+    return () => form?.removeEventListener("reset", resetPicker);
+  }, []);
+
+  useEffect(() => {
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  return (
+    <label className="logo-file-picker">
+      <span>АБО ДОДАЙ ЗОБРАЖЕННЯ З ГАЛЕРЕЇ</span>
+      <input
+        ref={inputRef}
+        name="logo_file"
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          setPreviewUrl(file ? URL.createObjectURL(file) : "");
+          setFileName(file?.name ?? "");
+        }}
+      />
+      {previewUrl && <img className="logo-file-preview" src={previewUrl} alt="Попередній перегляд логотипа" />}
+      <small>{fileName || "PNG, JPEG або WebP. Вибраний файл замінить URL і буде стиснутий автоматично."}</small>
+    </label>
+  );
+}
+
+async function optimizeLogo(file: File): Promise<string> {
+  const supportedTypes = ["image/png", "image/jpeg", "image/webp"];
+  if (!supportedTypes.includes(file.type)) throw new Error("Обери зображення PNG, JPEG або WebP.");
+  if (file.size > 10 * 1024 * 1024) throw new Error("Початкове зображення має бути менше 10 МБ.");
+
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error("Не вдалося відкрити це зображення. Спробуй інший файл.");
+  }
+
+  try {
+    const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+    let width = Math.max(1, Math.round(bitmap.width * scale));
+    let height = Math.max(1, Math.round(bitmap.height * scale));
+    let quality = 0.84;
+
+    for (let attempt = 0; attempt < 7; attempt += 1) {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Не вдалося підготувати зображення.");
+      context.drawImage(bitmap, 0, 0, width, height);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", quality));
+      if (!blob) throw new Error("Не вдалося стиснути зображення.");
+      if (blob.size <= 512 * 1024) {
+        return await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Не вдалося прочитати логотип."));
+          reader.onerror = () => reject(new Error("Не вдалося прочитати логотип."));
+          reader.readAsDataURL(blob);
+        });
+      }
+      width = Math.max(128, Math.round(width * 0.8));
+      height = Math.max(128, Math.round(height * 0.8));
+      quality = Math.max(0.45, quality - 0.08);
+    }
+  } finally {
+    bitmap.close();
+  }
+  throw new Error("Не вдалося зменшити логотип до 512 КБ. Спробуй інше зображення.");
 }
 
 function AdminPlayerRow({
