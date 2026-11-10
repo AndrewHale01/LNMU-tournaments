@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent
 DATABASE = ROOT / "tournament.sqlite3"
 HOST = os.environ.get("HOST", "0.0.0.0" if "PORT" in os.environ else "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8000"))
-logger = logging.getLogger("fragua.api")
+logger = logging.getLogger("profcom_lnmu.api")
 
 
 class DatabaseConnection:
@@ -272,7 +272,7 @@ def error_response(message, status=400):
 
 
 class APIHandler(BaseHTTPRequestHandler):
-    server_version = "FragUA/1.0"
+    server_version = "PROFCOM-LNMU/1.0"
 
     def end_headers(self):
         origin = self.headers.get("Origin")
@@ -626,7 +626,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     initialize_database()
     server = ThreadingHTTPServer((HOST, PORT), APIHandler)
-    logger.info("FRAG UA API запущено: http://%s:%s", HOST, PORT)
+    logger.info("PROFCOM LNMU API запущено: http://%s:%s", HOST, PORT)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

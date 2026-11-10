@@ -1,4 +1,4 @@
-# FRAG UA — CS2 Tournament Series
+# PROFCOM LNMU — CS2 Tournament Series
 
 React + Vite public frontend with a separate admin entry page, Bootstrap Icons, and a Python API. The frontend can be published on GitHub Pages, while the API uses PostgreSQL on Supabase. SQLite remains available for local development.
 
@@ -26,12 +26,17 @@ The local SQLite database is created automatically at `backend\tournament.sqlite
 
 1. Create a free PostgreSQL project on [Supabase](https://supabase.com/). Copy its PostgreSQL connection URI from the project's **Connect** settings; use the session pooler URI if direct connections are unavailable.
 2. Push this repository to GitHub. The Pages workflow will wait for `VITE_API_BASE_URL`; configure that variable after the API has been deployed.
-3. In [Render](https://render.com/), create a Blueprint from the repository and use the included `render.yaml`. The API service is configured to run from `backend/`.
-4. In the Render service's environment settings, set:
+3. In [Render](https://render.com/), create a **Web Service** from this repository named `profcom-lnmu-api`:
+   - Runtime: Python 3; region: Frankfurt; plan: Free.
+   - Root directory: `backend`.
+   - Build command: `pip install -r requirements.txt`.
+   - Start command: `python server.py`.
+   - Health check path: `/api/health`.
+4. In the new Render service's environment settings, set:
    - `DATABASE_URL` to the Supabase PostgreSQL connection URI.
    - `FRONTEND_ORIGINS` to the exact public origin, e.g. `https://YOUR-USERNAME.github.io` (or your custom domain). Do not add a repository path.
    - Telegram variables as described below once the bot is ready.
-5. Deploy the API and check `https://YOUR-API.onrender.com/api/health`.
+5. Deploy the API and check `https://profcom-lnmu-api.onrender.com/api/health`.
 
 The API uses PostgreSQL whenever `DATABASE_URL` is set and falls back to local SQLite otherwise. Existing local SQLite data is not automatically copied to Supabase.
 
@@ -39,7 +44,7 @@ Render's free API service can sleep after 15 minutes without traffic, so its fir
 
 ## Deploy the frontend to GitHub Pages
 
-1. In the GitHub repository, open **Settings → Secrets and variables → Actions → Variables** and add `VITE_API_BASE_URL`, set to the API's HTTPS URL, e.g. `https://YOUR-API.onrender.com`.
+1. In the GitHub repository, open **Settings → Secrets and variables → Actions → Variables** and add `VITE_API_BASE_URL`, set to `https://profcom-lnmu-api.onrender.com`.
 2. Open **Settings → Pages** and set the publishing source to **GitHub Actions**.
 3. Re-run the failed Pages workflow from **Actions**, or push another commit to `main`/`master`. It builds the React app and deploys `react/dist`. For a project repository, the workflow automatically handles the repository subpath.
 4. Set Render's `FRONTEND_ORIGINS` to the published site origin, such as `https://YOUR-USERNAME.github.io`, and redeploy the API if needed.

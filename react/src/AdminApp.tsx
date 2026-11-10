@@ -39,7 +39,7 @@ export default function AdminApp() {
 
   function authHeaders(): Record<string, string> {
     const initData = getTelegramInitData();
-    if (!initData) throw new Error("Відкрий адмін-панель через FRAG UA у Telegram WebApp.");
+    if (!initData) throw new Error("Відкрий адмін-панель через PROFCOM LNMU у Telegram WebApp.");
     return { "X-Telegram-Init-Data": initData };
   }
 
@@ -82,7 +82,7 @@ export default function AdminApp() {
     initializeTelegramWebApp();
     const initData = getTelegramInitData();
     if (!initData) {
-      setError("Відкрий адмін-панель через FRAG UA у Telegram WebApp.");
+      setError("Відкрий адмін-панель через PROFCOM LNMU у Telegram WebApp.");
       return;
     }
 
@@ -117,12 +117,12 @@ export default function AdminApp() {
       <header className="app-header">
         <a className="brand" href={appBaseUrl} aria-label="Повернутися на сайт">
           <span className="brand-icon"><i className="bi bi-shield-lock" /></span>
-          <span>FRAG <b>ADMIN</b></span>
+          <span>PROFCOM <b>LNMU</b></span>
         </a>
         <a className="game-label admin-back-link" href={appBaseUrl}>Публічний сайт <i className="bi bi-box-arrow-up-right" /></a>
       </header>
       <main className="app-content">
-        <PageTitle eyebrow="FRAG UA · КЕРУВАННЯ" title="Адмін-панель" />
+        <PageTitle eyebrow="PROFCOM LNMU · КЕРУВАННЯ" title="Адмін-панель" />
         {!overview ? (
           <section className="admin-card admin-login">
             {busy && <p>Перевіряємо Telegram-акаунт…</p>}

@@ -175,7 +175,7 @@ function App() {
         <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setModalOpen(false)}>
           <section className="registration-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <div className="modal-heading">
-              <div><span className="eyebrow">{tournament?.name ?? "FRAG UA"} · CS2</span><h2 id="modal-title">Реєстрація команди</h2></div>
+              <div><span className="eyebrow">{tournament?.name ?? "PROFCOM LNMU"} · CS2</span><h2 id="modal-title">Реєстрація команди</h2></div>
               <button className="close-button" onClick={() => setModalOpen(false)} aria-label="Закрити"><i className="bi bi-x-lg" /></button>
             </div>
             {success ? (
@@ -270,7 +270,7 @@ function TournamentPage({ overview, slotsLeft, onRegister }: { overview: Overvie
   const { tournament } = overview;
   return (
     <>
-      <PageTitle eyebrow="FRAG UA · CS2" title="Турнір" />
+      <PageTitle eyebrow="PROFCOM LNMU · CS2" title="Турнір" />
       {!tournament ? <EmptyState text="Турнір ще не створено. Адміністратор додасть його тут." /> : (
         <>
           <TournamentSummary tournament={tournament} slotsLeft={slotsLeft} onRegister={onRegister} />
@@ -402,7 +402,7 @@ function Bracket({ matches }: { matches: Match[] }) {
 function ProfilePage({ isAdmin }: { isAdmin: boolean }) {
   return (
     <>
-      <PageTitle eyebrow="FRAG UA · CS2" title="Профіль" />
+      <PageTitle eyebrow="PROFCOM LNMU · CS2" title="Профіль" />
       <section className="profile-card">
         <span className="profile-avatar"><i className="bi bi-person" /></span>
         <h2>Профіль гравця</h2>

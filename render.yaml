@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: frag-ua-api
+    name: profcom-lnmu-api-legacy
     runtime: python
     plan: free
     rootDir: backend
