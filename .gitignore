@@ -1,0 +1,7 @@
+react/node_modules/
+react/dist/
+react/tsconfig.tsbuildinfo
+backend/__pycache__/
+backend/tournament.sqlite3
+*.py[cod]
+.env
