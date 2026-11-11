@@ -33,6 +33,24 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .eyebrow { color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .08em; }
 .welcome h1, .page-title h1 { margin: 7px 0 4px; font-size: 27px; line-height: 1.15; font-weight: 750; letter-spacing: -.035em; }
 .welcome p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.home-tournament-card { padding: 17px; border: 1px solid var(--separator); border-radius: 16px; background: var(--surface); }
+.home-tournament-card h2 { margin: 8px 0 5px; font-size: 18px; }
+.home-tournament-card p { margin: 0 0 14px; color: var(--muted); font-size: 11px; }
+.secondary-button { min-height: 42px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--separator); border-radius: 11px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 600; cursor: pointer; }
+.tournament-period-tabs { margin: 18px 0 0; padding: 4px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; border: 1px solid var(--separator); border-radius: 13px; background: var(--surface); }
+.tournament-period-tab { min-width: 0; min-height: 42px; padding: 0 5px; display: flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-size: 10px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.tournament-period-tab[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+.tournament-period-tab small { font-size: 9px; opacity: .8; }
+.tournament-group { margin-top: 18px; }
+.tournament-list-card { width: 100%; min-height: 78px; margin-bottom: 8px; padding: 11px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--separator); border-radius: 13px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; }
+.tournament-list-card:active { transform: scale(.99); }
+.tournament-list-icon { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; border-radius: 11px; background: var(--surface-raised); color: var(--accent); font-size: 16px; }
+.tournament-list-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.tournament-list-copy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.tournament-list-copy small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.tournament-list-logo { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 9px; object-fit: cover; }
+.tournament-list-chevron { color: var(--muted); font-size: 12px; }
+.tournament-back { margin: 13px 0 0; }
 .tournament-card { padding: 17px; border: 1px solid var(--separator); border-radius: 16px; background: var(--surface); }
 .card-topline { display: flex; align-items: center; justify-content: space-between; }
 .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 20px; background: color-mix(in srgb, var(--success) 13%, transparent); color: var(--success); font-size: 10px; font-weight: 600; }
@@ -153,7 +171,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .spinner { width: 17px; height: 17px; border: 2px solid #ffffff25; border-top-color: var(--accent); border-radius: 50%; animation: spin .75s linear infinite; }
 .error-banner, .form-error { padding: 11px 13px; border: 1px solid #f1666645; border-radius: 11px; background: #f1666612; color: #ff9999; font-size: 12px; line-height: 1.45; }
 .error-banner { margin-top: 14px; }
-.bottom-nav { position: fixed; right: 0; bottom: 0; left: 0; z-index: 10; min-height: calc(63px + env(safe-area-inset-bottom, 0px)); padding: 5px max(5px, calc((100% - 680px) / 2)) calc(5px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--separator); background: color-mix(in srgb, var(--background) 94%, transparent); backdrop-filter: blur(16px); }
+.bottom-nav { position: fixed; right: 0; bottom: 0; left: 0; z-index: 10; min-height: calc(63px + env(safe-area-inset-bottom, 0px)); padding: 5px max(5px, calc((100% - 680px) / 2)) calc(5px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--separator); background: color-mix(in srgb, var(--background) 94%, transparent); backdrop-filter: blur(16px); }
 .nav-item { min-width: 0; padding: 4px 1px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; }
 .nav-item i { font-size: 19px; line-height: 1; }
 .nav-item span { font-size: 9px; font-weight: 500; }

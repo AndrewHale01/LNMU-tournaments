@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from telegram_auth import verify_telegram_init_data
 
@@ -170,9 +170,46 @@ def initialize_database():
 
 def current_tournament(connection):
     row = connection.execute(
-        "SELECT * FROM tournaments WHERE status != 'archived' ORDER BY id DESC LIMIT 1"
+        "SELECT * FROM tournaments ORDER BY id DESC LIMIT 1"
     ).fetchone()
     return dict(row) if row else None
+
+
+def tournament_by_id(connection, tournament_id):
+    row = connection.execute("SELECT * FROM tournaments WHERE id = ?", (tournament_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def tournament_period(tournament, today=None):
+    today = today or datetime.now(timezone.utc).date().isoformat()
+    if tournament["end_date"] < today:
+        return "past"
+    if tournament["start_date"] > today:
+        return "upcoming"
+    return "ongoing"
+
+
+def get_tournament_list():
+    with connect_db() as connection:
+        rows = connection.execute(
+            """
+            SELECT t.*,
+                   SUM(CASE WHEN teams.status = 'approved' THEN 1 ELSE 0 END) AS registered_teams,
+                   SUM(CASE WHEN teams.status = 'pending' THEN 1 ELSE 0 END) AS pending_teams
+            FROM tournaments t
+            LEFT JOIN teams ON teams.tournament_id = t.id
+            GROUP BY t.id
+            ORDER BY t.start_date DESC, t.id DESC
+            """
+        ).fetchall()
+    tournaments = []
+    for row in rows:
+        tournament = dict(row)
+        tournament["registered_teams"] = tournament["registered_teams"] or 0
+        tournament["pending_teams"] = tournament["pending_teams"] or 0
+        tournament["period"] = tournament_period(tournament)
+        tournaments.append(tournament)
+    return tournaments
 
 
 def get_team(connection, team_id):
@@ -251,9 +288,15 @@ def get_standings(connection, tournament_id, win_points, groups_only=False):
     return sorted(standings, key=lambda team: (-team["points"], -team["wins"], team["tag"].casefold()))
 
 
-def get_overview():
+def get_overview(tournament_id=None):
     with connect_db() as connection:
-        tournament = current_tournament(connection)
+        tournament = (
+            tournament_by_id(connection, tournament_id)
+            if tournament_id is not None
+            else current_tournament(connection)
+        )
+        if tournament:
+            tournament["period"] = tournament_period(tournament)
         if not tournament:
             return {"tournament": None, "matches": [], "teams": [], "leaderboard": [], "standings": [], "bracket": []}
         teams = [
@@ -332,6 +375,15 @@ class APIHandler(BaseHTTPRequestHandler):
             self.send_json(200, {"status": "ok"})
         elif path == "/api/overview":
             self.send_json(200, get_overview())
+        elif path == "/api/tournaments":
+            self.send_json(200, {"tournaments": get_tournament_list()})
+        elif re.fullmatch(r"/api/tournaments/\d+", path):
+            tournament_id = int(path.rsplit("/", 1)[1])
+            overview = get_overview(tournament_id)
+            if overview["tournament"] is None:
+                self.send_json(404, {"error": "Турнір не знайдено."})
+            else:
+                self.send_json(200, overview)
         elif path == "/api/admin/session":
             user = self.require_admin()
             if user:
@@ -343,7 +395,19 @@ class APIHandler(BaseHTTPRequestHandler):
         elif path == "/api/admin/overview":
             if not self.require_admin():
                 return
-            self.send_json(200, self.get_admin_overview())
+            requested_id = parse_qs(urlparse(self.path).query).get("tournament_id", [None])[0]
+            try:
+                tournament_id = int(requested_id) if requested_id is not None else None
+                if tournament_id is not None and tournament_id <= 0:
+                    raise ValueError
+            except ValueError:
+                self.send_json(400, {"error": "Некоректний ID турніру."})
+                return
+            self.send_json(200, self.get_admin_overview(tournament_id))
+        elif path == "/api/admin/tournaments":
+            if not self.require_admin():
+                return
+            self.send_json(200, {"tournaments": get_tournament_list()})
         elif path == "/api/player/invitations":
             user = self.require_telegram_user()
             if user:
@@ -457,7 +521,8 @@ class APIHandler(BaseHTTPRequestHandler):
             with connect_db() as connection:
                 if self.get_player_ban(connection, user["id"]):
                     return error_response("Твій Telegram-акаунт заблоковано в застосунку. Звернися до адміністратора.", 403)
-                tournament = current_tournament(connection)
+                tournament_id = self.integer(payload, "tournament_id", 1, 2**31 - 1)
+                tournament = tournament_by_id(connection, tournament_id)
                 if not tournament or tournament["status"] != "registration":
                     return error_response("Зараз немає турніру з відкритою реєстрацією.", 409)
                 existing_membership = connection.execute(
@@ -573,9 +638,7 @@ class APIHandler(BaseHTTPRequestHandler):
                         JOIN teams t ON t.id = p.team_id
                         WHERE lower(p.invited_username) = ? AND p.status = 'invited'
                           AND t.status != 'rejected'
-                          AND t.tournament_id = (
-                              SELECT id FROM tournaments WHERE status != 'archived' ORDER BY id DESC LIMIT 1
-                          )
+                          AND t.status != 'archived'
                         ORDER BY p.id DESC
                         """,
                         (username,),
@@ -595,13 +658,11 @@ class APIHandler(BaseHTTPRequestHandler):
                     return error_response("Твій Telegram-акаунт заблоковано в застосунку.", 403)
                 invite = connection.execute(
                     """
-                    SELECT p.id, p.team_id FROM team_players p
+                    SELECT p.id, p.team_id, t.tournament_id FROM team_players p
                     JOIN teams t ON t.id = p.team_id
                     WHERE p.id = ? AND lower(p.invited_username) = ? AND p.status = 'invited'
                       AND t.status != 'rejected'
-                      AND t.tournament_id = (
-                          SELECT id FROM tournaments WHERE status != 'archived' ORDER BY id DESC LIMIT 1
-                      )
+                      AND t.status != 'archived'
                     """,
                     (invitation_id, username),
                 ).fetchone()
@@ -611,11 +672,10 @@ class APIHandler(BaseHTTPRequestHandler):
                     """
                     SELECT COUNT(*) AS count
                     FROM team_players p JOIN teams t ON t.id = p.team_id
-                    WHERE p.telegram_user_id = ? AND t.tournament_id = (
-                        SELECT id FROM tournaments WHERE status != 'archived' ORDER BY id DESC LIMIT 1
-                    ) AND t.status != 'rejected'
+                    WHERE p.telegram_user_id = ? AND t.tournament_id = ?
+                      AND t.status != 'rejected'
                     """,
-                    (user["id"],),
+                    (user["id"], invite["tournament_id"]),
                 ).fetchone()["count"]
                 if existing_membership:
                     return error_response("Ти вже входиш до складу команди цього турніру.", 409)
@@ -633,9 +693,15 @@ class APIHandler(BaseHTTPRequestHandler):
         except integrity_error_types():
             return error_response("Цей Telegram-акаунт уже доданий до іншого складу.", 409)
 
-    def get_admin_overview(self):
+    def get_admin_overview(self, tournament_id=None):
         with connect_db() as connection:
-            tournament = current_tournament(connection)
+            tournament = (
+                tournament_by_id(connection, tournament_id)
+                if tournament_id is not None
+                else current_tournament(connection)
+            )
+            if tournament:
+                tournament["period"] = tournament_period(tournament)
             if not tournament:
                 teams = []
                 matches = []
@@ -680,6 +746,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 )
             return {
                 "tournament": tournament,
+                "tournaments": get_tournament_list(),
                 "teams": teams,
                 "matches": matches,
                 "players": players,
@@ -690,6 +757,27 @@ class APIHandler(BaseHTTPRequestHandler):
         try:
             if path == "/api/admin/tournaments":
                 return self.create_tournament(payload)
+            delete_match = re.fullmatch(r"/api/admin/tournaments/(\d+)/delete", path)
+            if delete_match:
+                return self.delete_tournament(int(delete_match.group(1)))
+            scoped_review = re.fullmatch(r"/api/admin/tournaments/(\d+)/teams/(\d+)/(approve|reject)", path)
+            if scoped_review:
+                return self.review_team(
+                    int(scoped_review.group(2)),
+                    scoped_review.group(3),
+                    int(scoped_review.group(1)),
+                )
+            scoped_result = re.fullmatch(r"/api/admin/tournaments/(\d+)/matches/(\d+)/result", path)
+            if scoped_result:
+                return self.save_result(
+                    int(scoped_result.group(2)),
+                    payload,
+                    int(scoped_result.group(1)),
+                )
+            scoped_matches = re.fullmatch(r"/api/admin/tournaments/(\d+)/matches", path)
+            if scoped_matches:
+                payload["tournament_id"] = scoped_matches.group(1)
+                return self.create_match(payload)
             approve_match = re.fullmatch(r"/api/admin/teams/(\d+)/(approve|reject)", path)
             if approve_match:
                 return self.review_team(int(approve_match.group(1)), approve_match.group(2))
@@ -712,6 +800,22 @@ class APIHandler(BaseHTTPRequestHandler):
         except integrity_error_types() as error:
             logger.info("Admin request conflict: %s", error)
             return error_response("Дані конфліктують із наявними записами.", 409)
+
+    def delete_tournament(self, tournament_id):
+        with connect_db() as connection:
+            if not tournament_by_id(connection, tournament_id):
+                return error_response("Турнір не знайдено.", 404)
+            connection.execute("DELETE FROM matches WHERE tournament_id = ?", (tournament_id,))
+            connection.execute(
+                """
+                DELETE FROM team_players
+                WHERE team_id IN (SELECT id FROM teams WHERE tournament_id = ?)
+                """,
+                (tournament_id,),
+            )
+            connection.execute("DELETE FROM teams WHERE tournament_id = ?", (tournament_id,))
+            connection.execute("DELETE FROM tournaments WHERE id = ?", (tournament_id,))
+        return 200, {"deleted": True, "tournament_id": tournament_id}
 
     def update_player_ban(self, telegram_user_id, action, payload, admin_id):
         if action == "ban":
@@ -784,7 +888,6 @@ class APIHandler(BaseHTTPRequestHandler):
         prize_pool = self.integer(payload, "prize_pool", 0, 100_000_000)
         win_points = self.integer(payload, "win_points", 1, 100)
         with connect_db() as connection:
-            connection.execute("UPDATE tournaments SET status = 'archived' WHERE status != 'archived'")
             tournament_id = connection.insert_id(
                 """
                 INSERT INTO tournaments
@@ -836,12 +939,12 @@ class APIHandler(BaseHTTPRequestHandler):
             raise ValueError("Вкажи посилання на логотип або завантаж зображення PNG, JPEG чи WebP.")
         return value
 
-    def review_team(self, team_id, decision):
+    def review_team(self, team_id, decision, tournament_id=None):
         new_status = "approved" if decision == "approve" else "rejected"
         with connect_db() as connection:
-            tournament = current_tournament(connection)
             team = get_team(connection, team_id)
-            if not team or not tournament or team["tournament_id"] != tournament["id"]:
+            tournament = tournament_by_id(connection, team["tournament_id"]) if team else None
+            if not team or not tournament or (tournament_id is not None and team["tournament_id"] != tournament_id):
                 return error_response("Заявку не знайдено.", 404)
             if team["status"] != "pending":
                 return error_response("Ця заявка вже розглянута.", 409)
@@ -874,7 +977,17 @@ class APIHandler(BaseHTTPRequestHandler):
         if team_a_id == team_b_id:
             raise ValueError("Обери дві різні команди.")
         with connect_db() as connection:
-            tournament = current_tournament(connection)
+            requested_tournament_id = payload.get("tournament_id")
+            tournament_id = (
+                self.integer(payload, "tournament_id", 1, 2**31 - 1)
+                if requested_tournament_id is not None
+                else None
+            )
+            tournament = (
+                tournament_by_id(connection, tournament_id)
+                if tournament_id is not None
+                else current_tournament(connection)
+            )
             if not tournament:
                 return error_response("Спочатку створи турнір.", 409)
             for team_id in (team_a_id, team_b_id):
@@ -902,13 +1015,22 @@ class APIHandler(BaseHTTPRequestHandler):
             created = next(match for match in get_matches(connection, tournament["id"]) if match["id"] == match_id)
         return 201, {"match": created}
 
-    def save_result(self, match_id, payload):
+    def save_result(self, match_id, payload, tournament_id=None):
         score_a = self.integer(payload, "score_a", 0, 99)
         score_b = self.integer(payload, "score_b", 0, 99)
         if score_a == score_b:
             raise ValueError("Матч CS2 не може завершитися нічиєю.")
         with connect_db() as connection:
-            tournament = current_tournament(connection)
+            match_tournament = connection.execute(
+                "SELECT tournament_id FROM matches WHERE id = ?",
+                (match_id,),
+            ).fetchone()
+            if not match_tournament:
+                return error_response("Матч не знайдено або в ньому не вказані команди.", 404)
+            actual_tournament_id = match_tournament["tournament_id"]
+            if tournament_id is not None and tournament_id != actual_tournament_id:
+                return error_response("Матч не знайдено у вибраному турнірі.", 404)
+            tournament = tournament_by_id(connection, actual_tournament_id)
             if not tournament:
                 return error_response("Турнір не знайдено.", 404)
             cursor = connection.execute(

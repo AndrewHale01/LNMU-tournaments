@@ -13,6 +13,7 @@ type Tournament = {
   format: "groups" | "playoff" | "both";
   win_points: number;
   status: string;
+  period?: "past" | "ongoing" | "upcoming";
   registered_teams: number;
   pending_teams: number;
 };
@@ -64,17 +65,18 @@ type Overview = {
   bracket: Match[];
 };
 
+type TournamentListItem = Pick<Tournament, "id" | "name" | "logo_url" | "start_date" | "end_date" | "prize_pool" | "team_limit" | "format" | "status" | "registered_teams" | "pending_teams" | "period">;
+
 type PlayerSanction = {
   reason: string;
   expires_at: string | null;
 };
 
-type Tab = "home" | "tournament" | "matches" | "rules" | "profile";
+type Tab = "home" | "tournaments" | "rules" | "profile";
 
 const navigation: { id: Tab; label: string; icon: string }[] = [
   { id: "home", label: "Головна", icon: "bi-house-door" },
-  { id: "tournament", label: "Турнір", icon: "bi-trophy" },
-  { id: "matches", label: "Матчі", icon: "bi-controller" },
+  { id: "tournaments", label: "Турніри", icon: "bi-trophy" },
   { id: "rules", label: "Правила", icon: "bi-journal-text" },
   { id: "profile", label: "Профіль", icon: "bi-person" },
 ];
@@ -83,9 +85,14 @@ const money = new Intl.NumberFormat("uk-UA");
 
 function App() {
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [tournaments, setTournaments] = useState<TournamentListItem[]>([]);
+  const [selectedTournament, setSelectedTournament] = useState<Overview | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [modalOpen, setModalOpen] = useState(false);
+  const [registrationTournament, setRegistrationTournament] = useState<Overview | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [success, setSuccess] = useState("");
@@ -95,6 +102,30 @@ function App() {
     const response = await fetch(apiUrl("/api/overview"));
     if (!response.ok) throw new Error("Не вдалося завантажити дані турніру.");
     setOverview((await response.json()) as Overview);
+  }
+
+  async function refreshTournaments() {
+    const response = await fetch(apiUrl("/api/tournaments"));
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? "Не вдалося завантажити список турнірів.");
+    setTournaments(result.tournaments as TournamentListItem[]);
+  }
+
+  async function openTournament(tournamentId: number) {
+    setDetailLoading(true);
+    setDetailError("");
+    setSelectedTournament(null);
+    setActiveTab("tournaments");
+    try {
+      const response = await fetch(apiUrl(`/api/tournaments/${tournamentId}`));
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Не вдалося завантажити турнір.");
+      setSelectedTournament(result as Overview);
+    } catch (error) {
+      setDetailError(error instanceof Error ? error.message : "Не вдалося завантажити турнір.");
+    } finally {
+      setDetailLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -119,7 +150,7 @@ function App() {
           });
           if (active && adminResponse.ok) setIsAdmin(true);
         }
-        await refreshOverview();
+        await Promise.all([refreshOverview(), refreshTournaments()]);
       } catch (error) {
         if (active) setLoadError(error instanceof Error ? error.message : "Не вдалося завантажити застосунок.");
       }
@@ -139,12 +170,16 @@ function App() {
       const response = await fetch(apiUrl("/api/teams"), {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Telegram-Init-Data": getTelegramInitData() },
-        body: JSON.stringify(Object.fromEntries(new FormData(form).entries())),
+        body: JSON.stringify({
+          ...Object.fromEntries(new FormData(form).entries()),
+          tournament_id: registrationTournament?.tournament?.id,
+        }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Не вдалося зареєструвати команду.");
       setSuccess(`Заявку команди ${result.team.tag} надіслано адміну на підтвердження.`);
       form.reset();
+      await Promise.all([refreshOverview(), refreshTournaments()]);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Сталася помилка реєстрації.");
     } finally {
@@ -153,8 +188,19 @@ function App() {
   }
 
   const tournament = overview?.tournament ?? null;
-  const placesTaken = tournament ? tournament.registered_teams + tournament.pending_teams : 0;
-  const slotsLeft = tournament ? Math.max(tournament.team_limit - placesTaken, 0) : 0;
+  const homeSlotsLeft = tournament
+    ? Math.max(tournament.team_limit - tournament.registered_teams - tournament.pending_teams, 0)
+    : 0;
+  const registrationTarget = registrationTournament?.tournament ?? null;
+  const placesTaken = registrationTarget ? registrationTarget.registered_teams + registrationTarget.pending_teams : 0;
+  const slotsLeft = registrationTarget ? Math.max(registrationTarget.team_limit - placesTaken, 0) : 0;
+
+  function startRegistration(target: Overview) {
+    setRegistrationTournament(target);
+    setSuccess("");
+    setFormError("");
+    setModalOpen(true);
+  }
 
   if (playerSanction) {
     return (
@@ -184,7 +230,7 @@ function App() {
           <span className="brand-icon"><i className="bi bi-crosshair2" /></span>
           <span>PROFCOM <b>LNMU</b></span>
         </button>
-        <span className="game-label">{tournament ? "CS2 · " + tournament.name : "CS2 · ТУРНІРИ"}</span>
+        <span className="game-label">{selectedTournament?.tournament?.name || tournament?.name ? `CS2 · ${selectedTournament?.tournament?.name ?? tournament?.name}` : "CS2 · ТУРНІРИ"}</span>
       </header>
 
       <main className="app-content">
@@ -193,13 +239,19 @@ function App() {
         {overview && activeTab === "home" && (
           <HomePage
             overview={overview}
-            slotsLeft={slotsLeft}
+            slotsLeft={homeSlotsLeft}
             onNavigate={setActiveTab}
-            onRegister={() => { setSuccess(""); setFormError(""); setModalOpen(true); }}
+            onOpenTournament={() => tournament && openTournament(tournament.id)}
+            onViewAll={() => setActiveTab("tournaments")}
           />
         )}
-        {overview && activeTab === "tournament" && <TournamentPage overview={overview} slotsLeft={slotsLeft} onRegister={() => { setSuccess(""); setFormError(""); setModalOpen(true); }} />}
-        {overview && activeTab === "matches" && <MatchesPage matches={overview.matches} />}
+        {activeTab === "tournaments" && (
+          detailLoading ? <div className="loading-state"><span className="spinner" />Завантаження турніру…</div>
+            : detailError ? <div className="error-banner" role="alert">{detailError}</div>
+              : selectedTournament
+                ? <TournamentPage overview={selectedTournament} onBack={() => setSelectedTournament(null)} onRegister={() => startRegistration(selectedTournament)} />
+                : <TournamentsPage tournaments={tournaments} onOpen={openTournament} />
+        )}
         {overview && activeTab === "rules" && <RulesPage />}
         {overview && activeTab === "profile" && <ProfilePage isAdmin={isAdmin} user={getTelegramUser()} />}
       </main>
@@ -222,7 +274,7 @@ function App() {
         <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setModalOpen(false)}>
           <section className="registration-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <div className="modal-heading">
-              <div><span className="eyebrow">{tournament?.name ?? "PROFCOM LNMU"} · CS2</span><h2 id="modal-title">Реєстрація команди</h2></div>
+              <div><span className="eyebrow">{registrationTarget?.name ?? "PROFCOM LNMU"} · CS2</span><h2 id="modal-title">Реєстрація команди</h2></div>
               <button className="close-button" onClick={() => setModalOpen(false)} aria-label="Закрити"><i className="bi bi-x-lg" /></button>
             </div>
             {success ? (
@@ -243,8 +295,8 @@ function App() {
                 </label>
                 <p className="field-note">Додай до 4 гравців. Кожен підтвердить запрошення у своєму Telegram. Їхні ID бачить лише адміністратор.</p>
                 {formError && <div className="form-error" role="alert">{formError}</div>}
-                <button className="primary-button full-width" disabled={submitting || !tournament || slotsLeft === 0}>
-                  {submitting ? "НАДСИЛАЄМО…" : !tournament ? "НЕМАЄ АКТИВНОГО ТУРНІРУ" : slotsLeft === 0 ? "ВІЛЬНИХ МІСЦЬ НЕМАЄ" : "НАДІСЛАТИ ЗАЯВКУ"} <i className="bi bi-arrow-right" />
+                <button className="primary-button full-width" disabled={submitting || !registrationTarget || slotsLeft === 0}>
+                  {submitting ? "НАДСИЛАЄМО…" : !registrationTarget ? "ТУРНІР НЕ ОБРАНО" : slotsLeft === 0 ? "ВІЛЬНИХ МІСЦЬ НЕМАЄ" : "НАДІСЛАТИ ЗАЯВКУ"} <i className="bi bi-arrow-right" />
                 </button>
               </form>
             )}
@@ -259,15 +311,16 @@ function HomePage({
   overview,
   slotsLeft,
   onNavigate,
-  onRegister,
+  onOpenTournament,
+  onViewAll,
 }: {
   overview: Overview;
   slotsLeft: number;
   onNavigate: (tab: Tab) => void;
-  onRegister: () => void;
+  onOpenTournament: () => void;
+  onViewAll: () => void;
 }) {
-  const { tournament, matches, leaderboard } = overview;
-  const nextMatch = matches.find((match) => match.status === "upcoming");
+  const { tournament } = overview;
 
   return (
     <>
@@ -277,31 +330,82 @@ function HomePage({
         <p>Турніри, команди та матчі — все в одному місці для медиків.</p>
       </section>
       {tournament ? (
-        <TournamentSummary tournament={tournament} slotsLeft={slotsLeft} onRegister={onRegister} />
+        <section className="home-tournament-card">
+          <div className="card-game">АКТУАЛЬНИЙ ТУРНІР · CS2</div>
+          <h2>{tournament.name}</h2>
+          <p>{formatDate(tournament.start_date)} — {formatDate(tournament.end_date)} · {slotsLeft} вільних місць</p>
+          <button className="primary-button full-width" onClick={onOpenTournament}>Відкрити сторінку турніру <i className="bi bi-arrow-right" /></button>
+        </section>
       ) : (
-        <EmptyState text="Турнір ще не створено. Завітай пізніше." />
+        <EmptyState text="Найближчих турнірів поки немає." />
       )}
       <section className="content-section">
-        <SectionHeading title="Наступний матч" action="Усі матчі" onAction={() => onNavigate("matches")} />
-        {nextMatch ? <MatchCard match={nextMatch} /> : <EmptyState text="Матчі з'являться після підтвердження команд і створення розкладу адміністратором." />}
+        <SectionHeading title="Турніри" action="Переглянути всі" onAction={onViewAll} />
+        <p className="rules-intro">Склади, групи, сітка плей-оф і розклад матчів — на сторінці кожного турніру.</p>
+        <button className="secondary-button full-width" onClick={() => onNavigate("tournaments")}>Відкрити список турнірів <i className="bi bi-chevron-right" /></button>
       </section>
-      <section className="content-section">
-        <SectionHeading title="Топ команд" />
-        {leaderboard.length ? (
-          <div className="team-list compact-list">{leaderboard.slice(0, 3).map((team) => <TeamRow key={team.tag} team={team} />)}</div>
-        ) : (
-          <EmptyState text="Тут з'являться підтверджені команди. Очки нараховуються за перемоги в матчах." />
-        )}
+    </>
+  );
+}
+
+function TournamentsPage({ tournaments, onOpen }: { tournaments: TournamentListItem[]; onOpen: (id: number) => void }) {
+  const [activePeriod, setActivePeriod] = useState<TournamentListItem["period"]>("ongoing");
+  const groups: { id: TournamentListItem["period"]; title: string; icon: string }[] = [
+    { id: "ongoing", title: "Тривають", icon: "bi-broadcast" },
+    { id: "upcoming", title: "Майбутні", icon: "bi-calendar-event" },
+    { id: "past", title: "Минулі", icon: "bi-clock-history" },
+  ];
+  const activeGroup = groups.find((group) => group.id === activePeriod) ?? groups[0];
+  const items = tournaments.filter((item) => item.period === activePeriod);
+
+  return (
+    <>
+      <PageTitle eyebrow="PROFCOM LNMU · CS2" title="Турніри" />
+      <div className="tournament-period-tabs" role="group" aria-label="Категорії турнірів">
+        {groups.map((group) => {
+          const count = tournaments.filter((item) => item.period === group.id).length;
+          return (
+            <button
+              className="tournament-period-tab"
+              key={group.id}
+              type="button"
+              aria-pressed={activePeriod === group.id}
+              onClick={() => setActivePeriod(group.id)}
+            >
+              <i className={`bi ${group.icon}`} aria-hidden="true" />
+              <span>{group.title}</span>
+              <small>{count}</small>
+            </button>
+          );
+        })}
+      </div>
+      <section className="content-section tournament-group" aria-live="polite">
+        <SectionHeading title={activeGroup.title} />
+        {items.length ? items.map((item) => (
+          <button className="tournament-list-card" key={item.id} onClick={() => onOpen(item.id)}>
+            <span className="tournament-list-icon"><i className={`bi ${activeGroup.icon}`} aria-hidden="true" /></span>
+            <span className="tournament-list-copy">
+              <strong>{item.name}</strong>
+              <small>{formatDate(item.start_date)} — {formatDate(item.end_date)} · {item.registered_teams}/{item.team_limit} команд</small>
+              <small>{item.period === "upcoming" && item.status === "registration" ? "Реєстрація відкрита" : periodLabel(item.period)}</small>
+            </span>
+            {item.logo_url && <img className="tournament-list-logo" src={item.logo_url} alt="" />}
+            <i className="bi bi-chevron-right tournament-list-chevron" aria-hidden="true" />
+          </button>
+        )) : <EmptyState text="Поки немає турнірів у цій категорії." />}
       </section>
     </>
   );
 }
 
 function TournamentSummary({ tournament, slotsLeft, onRegister }: { tournament: Tournament; slotsLeft: number; onRegister: () => void }) {
+  const isUpcoming = tournament.period === "upcoming";
+  const isPast = tournament.period === "past";
+  const registrationOpen = tournament.status === "registration" && !isPast;
   return (
     <section className="tournament-card">
       <div className="card-topline">
-        <span className={`status-pill ${tournament.status !== "registration" ? "status-neutral" : ""}`}><i /> {tournament.status === "registration" ? "Реєстрація відкрита" : "Турнір триває"}</span>
+        <span className={`status-pill ${isPast || !registrationOpen ? "status-neutral" : ""}`}><i /> {isPast ? "Турнір завершився" : isUpcoming ? registrationOpen ? "Реєстрація відкрита" : "Скоро розпочнеться" : "Турнір триває"}</span>
         {tournament.logo_url && <img className="tournament-logo" src={tournament.logo_url} alt={`Логотип ${tournament.name}`} />}
       </div>
       <div className="card-game">COUNTER-STRIKE 2</div>
@@ -310,20 +414,23 @@ function TournamentSummary({ tournament, slotsLeft, onRegister }: { tournament: 
         <div><span>ПРИЗОВИЙ ФОНД</span><strong>{money.format(tournament.prize_pool)} ₴</strong></div>
         <div><span>ВІЛЬНІ СЛОТИ</span><strong>{slotsLeft} <small>/ {tournament.team_limit}</small></strong></div>
       </div>
-      <button className="primary-button full-width" onClick={onRegister} disabled={tournament.status !== "registration" || slotsLeft === 0}>
-        {tournament.status !== "registration" ? "РЕЄСТРАЦІЯ ЗАКРИТА" : slotsLeft === 0 ? "ВІЛЬНИХ МІСЦЬ НЕМАЄ" : "Зареєструвати команду"} <i className="bi bi-arrow-right" />
+      <button className="primary-button full-width" onClick={onRegister} disabled={!registrationOpen || slotsLeft === 0}>
+        {!registrationOpen ? "РЕЄСТРАЦІЯ ЗАКРИТА" : slotsLeft === 0 ? "ВІЛЬНИХ МІСЦЬ НЕМАЄ" : "Зареєструвати команду"} <i className="bi bi-arrow-right" />
       </button>
     </section>
   );
 }
 
-function TournamentPage({ overview, slotsLeft, onRegister }: { overview: Overview; slotsLeft: number; onRegister: () => void }) {
+function TournamentPage({ overview, onBack, onRegister }: { overview: Overview; onBack: () => void; onRegister: () => void }) {
   const { tournament } = overview;
+  const placesTaken = tournament ? tournament.registered_teams + tournament.pending_teams : 0;
+  const slotsLeft = tournament ? Math.max(tournament.team_limit - placesTaken, 0) : 0;
   return (
     <>
-      <PageTitle eyebrow="PROFCOM LNMU · CS2" title="Турнір" />
-      {!tournament ? <EmptyState text="Турнір ще не створено. Адміністратор додасть його тут." /> : (
+      <button className="text-button tournament-back" onClick={onBack}><i className="bi bi-arrow-left" /> До всіх турнірів</button>
+      {!tournament ? <EmptyState text="Турнір не знайдено." /> : (
         <>
+          <PageTitle eyebrow="PROFCOM LNMU · CS2" title={tournament.name} />
           <TournamentSummary tournament={tournament} slotsLeft={slotsLeft} onRegister={onRegister} />
           <section className="content-section">
             <SectionHeading title="Деталі турніру" />
@@ -332,6 +439,18 @@ function TournamentPage({ overview, slotsLeft, onRegister }: { overview: Overvie
               <DetailRow icon="bi-controller" label="ФОРМАТ МАТЧУ" value="CS2 · 5 на 5" />
               <DetailRow icon="bi-trophy" label="ФОРМАТ ТУРНІРУ" value={formatLabel(tournament.format)} />
               <DetailRow icon="bi-people" label="ПІДТВЕРДЖЕНО" value={`${tournament.registered_teams} / ${tournament.team_limit} команд`} />
+            </div>
+          </section>
+          <section className="content-section">
+            <SectionHeading title={`Команди (${overview.teams.length})`} />
+            <div className="team-list">
+              {overview.teams.map((team) => (
+                <div className="team-row" key={team.id}>
+                  <span className="team-avatar">{team.tag.slice(0, 1)}</span>
+                  <span className="team-info"><strong>{team.name}</strong><small>{team.tag} · капітан: {team.captain}</small></span>
+                </div>
+              ))}
+              {!overview.teams.length && <EmptyState text="Підтверджені команди з'являться тут." />}
             </div>
           </section>
           {tournament.format !== "playoff" && (
@@ -352,19 +471,6 @@ function TournamentPage({ overview, slotsLeft, onRegister }: { overview: Overvie
           </section>
         </>
       )}
-    </>
-  );
-}
-
-function MatchesPage({ matches }: { matches: Match[] }) {
-  return (
-    <>
-      <PageTitle eyebrow="CS2 · РОЗКЛАД" title="Матчі" />
-      <div className="filter-label"><i className="bi bi-calendar3" /> Розклад турніру</div>
-      <div className="match-list">
-        {matches.map((match) => <MatchCard key={match.id} match={match} />)}
-        {!matches.length && <EmptyState text="Розклад поки порожній. Матчі додасть адміністратор." />}
-      </div>
     </>
   );
 }
@@ -421,17 +527,6 @@ function RuleCard({ number, icon, title, children }: { number: string; icon: str
         <p>{children}</p>
       </div>
     </article>
-  );
-}
-
-function TeamRow({ team }: { team: Overview["leaderboard"][number] }) {
-  return (
-    <div className="team-row">
-      <span className="team-place">{String(team.place).padStart(2, "0")}</span>
-      <span className="team-avatar">{team.tag.slice(0, 1)}</span>
-      <span className="team-info"><strong>{team.name}</strong><small>{team.tag}</small></span>
-      <span className="team-points">{team.points} <small>pts</small></span>
-    </div>
   );
 }
 
@@ -587,6 +682,12 @@ function formatLabel(value: Tournament["format"]) {
   if (value === "groups") return "Лише таблиця";
   if (value === "playoff") return "Лише плей-оф";
   return "Таблиця і плей-оф";
+}
+
+function periodLabel(period: TournamentListItem["period"]) {
+  if (period === "past") return "Турнір завершився";
+  if (period === "upcoming") return "Скоро розпочнеться";
+  return "Триває";
 }
 
 export default App;

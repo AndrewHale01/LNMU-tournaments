@@ -6,6 +6,9 @@ type Tournament = {
   id: number;
   name: string;
   status: string;
+  start_date: string;
+  end_date: string;
+  period: "past" | "ongoing" | "upcoming";
 };
 
 type Team = {
@@ -52,6 +55,7 @@ type PlayerSanction = {
 
 type AdminOverview = {
   tournament: Tournament | null;
+  tournaments: Tournament[];
   teams: Team[];
   matches: Match[];
   players: AdminPlayer[];
@@ -61,6 +65,7 @@ type Payload = Record<string, unknown>;
 
 export default function AdminApp() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [selectedTournamentId, setSelectedTournamentId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -71,15 +76,17 @@ export default function AdminApp() {
     return { "X-Telegram-Init-Data": initData };
   }
 
-  async function loadOverview(): Promise<AdminOverview> {
-    const response = await fetch(apiUrl("/api/admin/overview"), { headers: authHeaders() });
+  async function loadOverview(tournamentId: number | null = selectedTournamentId): Promise<AdminOverview> {
+    const query = tournamentId === null ? "" : `?tournament_id=${tournamentId}`;
+    const response = await fetch(apiUrl(`/api/admin/overview${query}`), { headers: authHeaders() });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? "Не вдалося завантажити адмін-дані.");
     setOverview(result as AdminOverview);
+    setSelectedTournamentId((result as AdminOverview).tournament?.id ?? null);
     return result as AdminOverview;
   }
 
-  async function request(path: string, payload: Payload = {}) {
+  async function request(path: string, payload: Payload = {}): Promise<Record<string, unknown>> {
     const response = await fetch(apiUrl(`/api/admin/${path}`), {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
@@ -87,15 +94,27 @@ export default function AdminApp() {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? "Не вдалося виконати дію.");
+    return result as Record<string, unknown>;
   }
 
-  async function run(action: () => Promise<void>, message: string) {
+  async function run(action: () => Promise<unknown>, message: string) {
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      await action();
-      await loadOverview();
+      const actionResult = await action();
+      const tournamentsResponse = await fetch(apiUrl("/api/admin/tournaments"), { headers: authHeaders() });
+      const tournamentList = await tournamentsResponse.json();
+      if (!tournamentsResponse.ok) throw new Error(tournamentList.error ?? "Не вдалося оновити список турнірів.");
+      const availableTournaments = tournamentList.tournaments as Tournament[];
+      const requestedId = typeof actionResult === "number" || actionResult === null
+        ? actionResult
+        : selectedTournamentId;
+      const nextId = requestedId !== null && availableTournaments.some((item) => item.id === requestedId)
+        ? requestedId
+        : availableTournaments[0]?.id ?? null;
+      setSelectedTournamentId(nextId);
+      await loadOverview(nextId);
       setNotice(message);
       return true;
     } catch (actionError) {
@@ -124,7 +143,13 @@ export default function AdminApp() {
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error ?? "Не вдалося підтвердити права адміністратора.");
-        await loadOverview();
+        const tournamentsResponse = await fetch(apiUrl("/api/admin/tournaments"), { headers: authHeaders() });
+        const tournamentList = await tournamentsResponse.json();
+        if (!tournamentsResponse.ok) throw new Error(tournamentList.error ?? "Не вдалося завантажити турніри.");
+        const availableTournaments = tournamentList.tournaments as Tournament[];
+        const initialTournamentId = availableTournaments[0]?.id ?? null;
+        setSelectedTournamentId(initialTournamentId);
+        await loadOverview(initialTournamentId);
         if (active) setNotice(`Ви увійшли як ${result.user.first_name || "адміністратор"}.`);
       } catch (authError) {
         if (active) setError(authError instanceof Error ? authError.message : "Не вдалося увійти.");
@@ -169,6 +194,52 @@ export default function AdminApp() {
             </div>
             {error && <div className="form-error admin-notice" role="alert">{error}</div>}
             {notice && <div className="admin-success admin-notice" role="status">{notice}</div>}
+            <section className="admin-card admin-tournament-selector">
+              <label>ОБРАТИ ТУРНІР ДЛЯ КЕРУВАННЯ
+                <select
+                  value={selectedTournamentId ?? ""}
+                  disabled={busy || !overview.tournaments.length}
+                  onChange={(event) => {
+                    const tournamentId = Number(event.currentTarget.value);
+                    setBusy(true);
+                    setError("");
+                    void loadOverview(tournamentId)
+                      .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : "Не вдалося завантажити турнір."))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  {!overview.tournaments.length && <option value="">Турнірів ще немає</option>}
+                  {overview.tournaments.map((tournament) => (
+                    <option key={tournament.id} value={tournament.id}>
+                      {tournament.name} · {adminPeriodLabel(tournament.period)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {overview.tournament && (
+                <button
+                  type="button"
+                  className="delete-tournament-button"
+                  disabled={busy}
+                  onClick={() => {
+                    const confirmed = window.confirm(
+                      `Видалити турнір «${overview.tournament?.name}» назавжди? Команди, заявки, матчі та результати буде видалено. Глобальні блокування гравців збережуться.`,
+                    );
+                    if (confirmed && overview.tournament) {
+                      void run(
+                        async () => {
+                          await request(`tournaments/${overview.tournament?.id}/delete`);
+                          return null;
+                        },
+                        "Турнір і його дані видалено.",
+                      );
+                    }
+                  }}
+                >
+                  <i className="bi bi-trash3" /> Видалити турнір
+                </button>
+              )}
+            </section>
             <section className="content-section">
               <SectionHeading title={`Гравці та блокування (${overview.players.length})`} />
               <p className="admin-help">Telegram ID бачать лише адміністратори. Запрошені гравці з'являться тут після підтвердження у WebApp.</p>
@@ -199,7 +270,12 @@ export default function AdminApp() {
               )}
             </section>
             <AdminForm title="Створити турнір" busy={busy} submitLabel="СТВОРИТИ ТУРНІР" onSubmit={(payload) => run(
-              () => request("tournaments", payload),
+              async () => {
+                const result = await request("tournaments", payload);
+                const created = result.tournament as { id?: unknown } | undefined;
+                if (typeof created?.id !== "number") throw new Error("Сервер не повернув ID створеного турніру.");
+                return created.id;
+              },
               "Турнір створено.",
             )}>
               <label>НАЗВА ТУРНІРУ<input name="name" required maxLength={100} placeholder="Назва турніру" /></label>
@@ -233,8 +309,8 @@ export default function AdminApp() {
                       <div className="admin-row" key={team.id}>
                         <div className="team-info"><strong>{team.name} <small>({team.tag})</small></strong><small>{team.captain} · {team.contact}</small></div>
                         <div className="admin-row-actions">
-                          <button className="approve-button" disabled={busy} onClick={() => void run(() => request(`teams/${team.id}/approve`), `Команду ${team.tag} підтверджено.`)} aria-label={`Підтвердити ${team.tag}`}><i className="bi bi-check-lg" /></button>
-                          <button className="reject-button" disabled={busy} onClick={() => void run(() => request(`teams/${team.id}/reject`), `Заявку ${team.tag} відхилено.`)} aria-label={`Відхилити ${team.tag}`}><i className="bi bi-x-lg" /></button>
+                          <button className="approve-button" disabled={busy} onClick={() => void run(async () => { await request(`tournaments/${overview.tournament?.id}/teams/${team.id}/approve`); }, `Команду ${team.tag} підтверджено.`)} aria-label={`Підтвердити ${team.tag}`}><i className="bi bi-check-lg" /></button>
+                          <button className="reject-button" disabled={busy} onClick={() => void run(async () => { await request(`tournaments/${overview.tournament?.id}/teams/${team.id}/reject`); }, `Заявку ${team.tag} відхилено.`)} aria-label={`Відхилити ${team.tag}`}><i className="bi bi-x-lg" /></button>
                         </div>
                       </div>
                     ))}
@@ -242,7 +318,7 @@ export default function AdminApp() {
                   </div>
                 </section>
                 <AdminForm title="Додати матч" busy={busy} submitLabel="ДОДАТИ МАТЧ" onSubmit={(payload) => run(
-                  () => request("matches", payload),
+                  async () => { await request(`tournaments/${overview.tournament?.id}/matches`, payload); },
                   "Матч додано до розкладу.",
                 )}>
                   <div className="admin-form-grid">
@@ -266,7 +342,7 @@ export default function AdminApp() {
                   <div className="admin-list">
                     {overview.matches.map((match) => (
                       <ResultForm key={match.id} match={match} busy={busy} onSubmit={(payload) => run(
-                        () => request(`matches/${match.id}/result`, payload),
+                        async () => { await request(`tournaments/${overview.tournament?.id}/matches/${match.id}/result`, payload); },
                         "Результат матчу збережено.",
                       )} />
                     ))}
@@ -473,4 +549,10 @@ function SectionHeading({ title }: { title: string }) {
 
 function EmptyState({ text }: { text: string }) {
   return <div className="empty-state"><i className="bi bi-inbox" /><span>{text}</span></div>;
+}
+
+function adminPeriodLabel(period: Tournament["period"]) {
+  if (period === "past") return "минулий";
+  if (period === "upcoming") return "майбутній";
+  return "триває";
 }
