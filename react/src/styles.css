@@ -124,6 +124,8 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .detail-icon { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 9px; background: var(--surface-raised); color: var(--accent); font-size: 13px; }
 .detail-label { flex: 1; color: var(--muted); font-size: 10px; }
 .detail-row strong { text-align: right; font-size: 11px; font-weight: 600; }
+.detail-link { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+.detail-link:hover { text-decoration: underline; }
 .list-action { width: 100%; min-height: 45px; padding: 0; display: flex; align-items: center; justify-content: space-between; border: 0; border-top: 1px solid var(--separator); background: transparent; color: var(--accent); font-size: 12px; text-align: left; cursor: pointer; }
 .list-action i { color: var(--muted); font-size: 12px; }
 .rules-intro { margin: -4px 2px 14px; color: var(--muted); font-size: 12px; line-height: 1.5; }

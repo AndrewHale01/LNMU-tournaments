@@ -631,7 +631,11 @@ function ProfilePage({ isAdmin, user }: { isAdmin: boolean; user: TelegramUser |
         {user ? (
           <div className="profile-details">
             {user.username && <DetailRow icon="bi-at" label="TELEGRAM" value={`@${user.username}`} />}
-            <DetailRow icon="bi-controller" label="СПІЛЬНОТА" value="https://t.me/lnmu_profcom" />
+            <div className="detail-row">
+              <span className="detail-icon"><i className="bi bi-telegram" /></span>
+              <span className="detail-label">СПІЛЬНОТА</span>
+              <strong><a className="detail-link" href="https://t.me/lnmu_profcom" target="_blank" rel="noopener noreferrer">https://t.me/lnmu_profcom</a></strong>
+            </div>
           </div>
         ) : (
           <p className="profile-note">Відкрий цей застосунок через Telegram, щоб побачити дані свого профілю.</p>
