@@ -242,7 +242,7 @@ function App() {
           <span className="brand-icon"><i className="bi bi-crosshair2" /></span>
           <span>PROFCOM <b>LNMU</b></span>
         </button>
-        <span className="game-label">{selectedTournament?.tournament?.name || tournament?.name ? `CS2 · ${selectedTournament?.tournament?.name ?? tournament?.name}` : "CS2 · DOTA 2 · ТУРНІРИ"}</span>
+        <span className="game-label">{selectedTournament?.tournament?.name || tournament?.name ? `CS2 · DOTA 2 · ${selectedTournament?.tournament?.name ?? tournament?.name}` : "CS2 · DOTA 2 · ТУРНІРИ"}</span>
       </header>
 
       <main className="app-content">
