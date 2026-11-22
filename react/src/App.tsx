@@ -72,6 +72,18 @@ type PlayerSanction = {
   expires_at: string | null;
 };
 
+type PlayerProfile = {
+  steam_url: string;
+  faceit_url: string;
+};
+
+type TeammateProfile = PlayerProfile & {
+  id: number;
+  username: string;
+  team_name: string;
+  team_tag: string;
+};
+
 type Tab = "home" | "tournaments" | "rules" | "profile";
 
 const navigation: { id: Tab; label: string; icon: string }[] = [
@@ -207,7 +219,7 @@ function App() {
       <div className="app-shell">
         <header className="app-header">
           <span className="brand"><span className="brand-icon"><i className="bi bi-shield-lock" /></span><span>PROFCOM <b>LNMU</b></span></span>
-          <span className="game-label">CS2 · ДОСТУП ОБМЕЖЕНО</span>
+          <span className="game-label">CS2 · DOTA 2 · ДОСТУП ОБМЕЖЕНО</span>
         </header>
         <main className="app-content">
           <section className="access-blocked">
@@ -230,7 +242,7 @@ function App() {
           <span className="brand-icon"><i className="bi bi-crosshair2" /></span>
           <span>PROFCOM <b>LNMU</b></span>
         </button>
-        <span className="game-label">{selectedTournament?.tournament?.name || tournament?.name ? `CS2 · ${selectedTournament?.tournament?.name ?? tournament?.name}` : "CS2 · DOTA2 · ТУРНІРИ"}</span>
+        <span className="game-label">{selectedTournament?.tournament?.name || tournament?.name ? `CS2 · ${selectedTournament?.tournament?.name ?? tournament?.name}` : "CS2 · DOTA 2 · ТУРНІРИ"}</span>
       </header>
 
       <main className="app-content">
@@ -274,7 +286,7 @@ function App() {
         <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setModalOpen(false)}>
           <section className="registration-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <div className="modal-heading">
-              <div><span className="eyebrow">{registrationTarget?.name ?? "PROFCOM LNMU"} · CS2</span><h2 id="modal-title">Реєстрація команди</h2></div>
+              <div><span className="eyebrow">{registrationTarget?.name ? `${registrationTarget.name} · CS2` : "PROFCOM LNMU · CS2 · DOTA 2"}</span><h2 id="modal-title">Реєстрація команди</h2></div>
               <button className="close-button" onClick={() => setModalOpen(false)} aria-label="Закрити"><i className="bi bi-x-lg" /></button>
             </div>
             {success ? (
@@ -325,7 +337,7 @@ function HomePage({
   return (
     <>
       <section className="welcome">
-        <span className="eyebrow">УКРАЇНСЬКА CS2-DOTA2-СПІЛЬНОТА ЛНМУ</span>
+        <span className="eyebrow">УКРАЇНСЬКА СПІЛЬНОТА ЛНМУ · CS2 · DOTA 2</span>
         <h1>Час грати.</h1>
         <p>Турніри, команди та матчі — все в одному місці для медиків.</p>
       </section>
@@ -360,7 +372,7 @@ function TournamentsPage({ tournaments, onOpen }: { tournaments: TournamentListI
 
   return (
     <>
-      <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA2" title="Турніри" />
+      <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA 2" title="Турніри" />
       <div className="tournament-period-tabs" role="group" aria-label="Категорії турнірів">
         {groups.map((group) => {
           const count = tournaments.filter((item) => item.period === group.id).length;
@@ -430,7 +442,7 @@ function TournamentPage({ overview, onBack, onRegister }: { overview: Overview; 
       <button className="text-button tournament-back" onClick={onBack}><i className="bi bi-arrow-left" /> До всіх турнірів</button>
       {!tournament ? <EmptyState text="Турнір не знайдено." /> : (
         <>
-          <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA2" title={tournament.name} />
+          <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA 2" title={tournament.name} />
           <TournamentSummary tournament={tournament} slotsLeft={slotsLeft} onRegister={onRegister} />
           <section className="content-section">
             <SectionHeading title="Деталі турніру" />
@@ -495,7 +507,7 @@ function MatchCard({ match }: { match: Match }) {
 function RulesPage() {
   return (
     <>
-      <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA2" title="Правила" />
+      <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA 2" title="Правила" />
       <section className="content-section first-section">
         <p className="rules-intro">Основні умови участі в турнірах PROFCOM LNMU.</p>
         <div className="rules-list">
@@ -576,6 +588,12 @@ function ProfilePage({ isAdmin, user }: { isAdmin: boolean; user: TelegramUser |
   const [invitations, setInvitations] = useState<{ id: number; team_name: string; team_tag: string }[]>([]);
   const [invitationMessage, setInvitationMessage] = useState("");
   const [acceptingInvitation, setAcceptingInvitation] = useState(false);
+  const [playerProfile, setPlayerProfile] = useState<PlayerProfile>({ steam_url: "", faceit_url: "" });
+  const [teammates, setTeammates] = useState<TeammateProfile[]>([]);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profileNotice, setProfileNotice] = useState("");
 
   useEffect(() => {
     const initData = getTelegramInitData();
@@ -590,8 +608,46 @@ function ProfilePage({ isAdmin, user }: { isAdmin: boolean; user: TelegramUser |
       .catch((error: unknown) => {
         if (active) setInvitationMessage(error instanceof Error ? error.message : "Не вдалося завантажити запрошення.");
       });
+    setProfileLoading(true);
+    fetch(apiUrl("/api/player/profile"), { headers: { "X-Telegram-Init-Data": initData } })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? "Не вдалося завантажити ігрові профілі.");
+        if (active) {
+          setPlayerProfile(result.profile as PlayerProfile);
+          setTeammates(result.teammates as TeammateProfile[]);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) setProfileError(error instanceof Error ? error.message : "Не вдалося завантажити ігрові профілі.");
+      })
+      .finally(() => {
+        if (active) setProfileLoading(false);
+      });
     return () => { active = false; };
   }, [user]);
+
+  async function savePlayerProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingProfile(true);
+    setProfileError("");
+    setProfileNotice("");
+    try {
+      const response = await fetch(apiUrl("/api/player/profile"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Telegram-Init-Data": getTelegramInitData() },
+        body: JSON.stringify(playerProfile),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Не вдалося зберегти ігрові профілі.");
+      setPlayerProfile(result.profile as PlayerProfile);
+      setProfileNotice("Посилання збережено.");
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : "Не вдалося зберегти ігрові профілі.");
+    } finally {
+      setSavingProfile(false);
+    }
+  }
 
   async function acceptInvitation(invitationId: number) {
     setAcceptingInvitation(true);
@@ -615,7 +671,7 @@ function ProfilePage({ isAdmin, user }: { isAdmin: boolean; user: TelegramUser |
 
   return (
     <>
-      <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA2" title="Профіль" />
+      <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA 2" title="Профіль" />
       <section className="profile-card">
         <div className="profile-identity">
           <span className={`profile-avatar ${user?.photo_url ? "has-photo" : ""}`}>
@@ -639,6 +695,61 @@ function ProfilePage({ isAdmin, user }: { isAdmin: boolean; user: TelegramUser |
           </div>
         ) : (
           <p className="profile-note">Відкрий цей застосунок через Telegram, щоб побачити дані свого профілю.</p>
+        )}
+        {user && (
+          <section className="player-game-profiles">
+            <h3>Ігрові профілі</h3>
+            <p className="profile-note">Додай посилання на публічні Steam і FACEIT профілі. Їх бачитимуть ти, гравці твоєї підтвердженої команди й адміністратори. Посилання не підтверджують власність акаунта — не вводь тут паролі чи коди.</p>
+            {profileLoading ? (
+              <div className="loading-state"><span className="spinner" />Завантаження профілів…</div>
+            ) : (
+              <form className="registration-form profile-game-form" onSubmit={(event) => void savePlayerProfile(event)}>
+                <label>STEAM ПРОФІЛЬ
+                  <input
+                    type="url"
+                    maxLength={2048}
+                    placeholder="https://steamcommunity.com/id/..."
+                    value={playerProfile.steam_url}
+                    onChange={(event) => {
+                      const steam_url = event.currentTarget.value;
+                      setPlayerProfile((current) => ({ ...current, steam_url }));
+                    }}
+                  />
+                </label>
+                <label>FACEIT ПРОФІЛЬ
+                  <input
+                    type="url"
+                    maxLength={2048}
+                    placeholder="https://www.faceit.com/en/players/..."
+                    value={playerProfile.faceit_url}
+                    onChange={(event) => {
+                      const faceit_url = event.currentTarget.value;
+                      setPlayerProfile((current) => ({ ...current, faceit_url }));
+                    }}
+                  />
+                </label>
+                {profileError && <p className="invitation-message" role="alert">{profileError}</p>}
+                {profileNotice && <p className="invitation-message" role="status">{profileNotice}</p>}
+                <button className="primary-button full-width" type="submit" disabled={savingProfile}>
+                  {savingProfile ? "ЗБЕРІГАЄМО…" : "ЗБЕРЕГТИ ПОСИЛАННЯ"}
+                </button>
+              </form>
+            )}
+            {teammates.length > 0 && (
+              <div className="profile-teammates">
+                <h4>Профілі гравців твоєї команди</h4>
+                {teammates.map((teammate) => (
+                  <div className="profile-teammate" key={teammate.id}>
+                    <span><strong>@{teammate.username || "гравець без username"}</strong><small>{teammate.team_tag} · {teammate.team_name}</small></span>
+                    <span className="profile-teammate-links">
+                      {teammate.steam_url && <a href={teammate.steam_url} target="_blank" rel="noopener noreferrer">Steam</a>}
+                      {teammate.faceit_url && <a href={teammate.faceit_url} target="_blank" rel="noopener noreferrer">FACEIT</a>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         )}
         {Boolean(invitations.length || invitationMessage) && (
           <section className="player-invitations" aria-labelledby="invitations-title">

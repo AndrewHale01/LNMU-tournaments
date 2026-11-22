@@ -148,6 +148,20 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .profile-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
 .profile-status.connected i { background: var(--success); }
 .profile-details { margin-top: 15px; padding: 0 10px; border: 1px solid var(--separator); border-radius: 12px; }
+.player-game-profiles { margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--separator); }
+.player-game-profiles h3, .profile-teammates h4 { margin: 0 0 7px; font-size: 12px; }
+.player-game-profiles > .profile-note { margin: 0 0 12px; padding: 0; background: none; }
+.profile-game-form { gap: 10px; }
+.profile-teammates { margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--separator); }
+.profile-teammate { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.profile-teammate + .profile-teammate { border-top: 1px solid var(--separator); }
+.profile-teammate > span:first-child { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.profile-teammate strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.profile-teammate small { color: var(--muted); font-size: 9px; }
+.profile-teammate-links { display: flex; gap: 8px; font-size: 10px; white-space: nowrap; }
+.profile-teammate-links a { color: var(--accent); text-decoration: none; }
+.profile-teammate-links a:hover { text-decoration: underline; }
+.profile-teammate-links a:focus-visible, .detail-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .profile-note { margin: 15px 0 0; padding: 12px; border-radius: 10px; background: var(--surface-raised); color: var(--muted); font-size: 11px; line-height: 1.5; }
 .profile-admin-link { margin-top: 15px; }
 .player-invitations { margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--separator); }

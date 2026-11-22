@@ -23,6 +23,109 @@ class DatabaseConnectionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             server.APIHandler.clean_logo(f"data:image/webp;base64,{oversized}")
 
+    def test_player_profile_urls_are_limited_to_https_platform_profiles(self):
+        self.assertEqual(
+            server.APIHandler.clean_player_profile_url(
+                {"steam_url": "https://www.steamcommunity.com/id/Player_One/"},
+                "steam_url",
+            ),
+            "https://steamcommunity.com/id/Player_One",
+        )
+        self.assertEqual(
+            server.APIHandler.clean_player_profile_url(
+                {"faceit_url": "https://faceit.com/en/players/Player.One"},
+                "faceit_url",
+            ),
+            "https://www.faceit.com/en/players/Player.One",
+        )
+        self.assertEqual(server.APIHandler.clean_player_profile_url({}, "steam_url"), "")
+        for field, url in (
+            ("steam_url", "http://steamcommunity.com/id/player"),
+            ("steam_url", "https://steamcommunity.com.example.org/id/player"),
+            ("steam_url", "https://steamcommunity.com/workshop"),
+            ("faceit_url", "https://faceit.com/en/players/player?redirect=example.org"),
+            ("faceit_url", "https://example.org/en/players/player"),
+        ):
+            with self.subTest(field=field, url=url), self.assertRaises(ValueError):
+                server.APIHandler.clean_player_profile_url({field: url}, field)
+
+    def test_player_profiles_are_visible_to_owner_teammates_and_admins_only(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            database = Path(temporary_directory) / "tournament.sqlite3"
+            with patch.object(server, "DATABASE", database), patch.dict("os.environ", {"DATABASE_URL": ""}):
+                server.initialize_database()
+                handler = object.__new__(server.APIHandler)
+                _, tournament_result = handler.create_tournament({
+                    "name": "Test tournament",
+                    "logo_url": "",
+                    "start_date": "2026-11-10",
+                    "end_date": "2026-11-11",
+                    "format": "both",
+                    "team_limit": 8,
+                    "prize_pool": 0,
+                    "win_points": 3,
+                })
+                tournament_id = tournament_result["tournament"]["id"]
+                status, team_result = handler.register_team({
+                    "name": "Team Alpha",
+                    "tag": "ALPHA",
+                    "captain": "Captain",
+                    "contact": "@captain",
+                    "players": "@player_one",
+                    "tournament_id": tournament_id,
+                }, {"id": 1001, "username": "captain"})
+                self.assertEqual(status, 201)
+                invitation_id = handler.get_player_invitations(
+                    {"id": 2002, "username": "player_one"}
+                )["invitations"][0]["id"]
+                self.assertEqual(
+                    handler.accept_player_invitation(
+                        {"invitation_id": invitation_id},
+                        {"id": 2002, "username": "player_one"},
+                    )[0],
+                    200,
+                )
+                self.assertEqual(handler.review_team(team_result["team"]["id"], "approve")[0], 200)
+
+                captain_profile = {
+                    "steam_url": "https://steamcommunity.com/id/captain",
+                    "faceit_url": "",
+                    "telegram_user_id": 9999,
+                }
+                self.assertEqual(handler.update_player_profile(captain_profile, {"id": 1001})[0], 200)
+                self.assertEqual(handler.update_player_profile({
+                    "steam_url": "",
+                    "faceit_url": "https://www.faceit.com/en/players/player_one",
+                }, {"id": 2002})[0], 200)
+
+                player_view = handler.get_player_profile({"id": 1001})
+                self.assertEqual(player_view["profile"]["steam_url"], captain_profile["steam_url"])
+                self.assertEqual(len(player_view["teammates"]), 1)
+                self.assertEqual(
+                    player_view["teammates"][0]["faceit_url"],
+                    "https://www.faceit.com/en/players/player_one",
+                )
+                self.assertNotIn("telegram_user_id", repr(player_view))
+                outsider_view = handler.get_player_profile({"id": 3003})
+                self.assertEqual(outsider_view["teammates"], [])
+                public_view = server.get_overview(tournament_id)
+                self.assertNotIn(captain_profile["steam_url"], repr(public_view))
+                self.assertNotIn("faceit.com", repr(public_view))
+
+                admin_view = handler.get_admin_overview(tournament_id)
+                self.assertIn(captain_profile["steam_url"], repr(admin_view["players"]))
+                self.assertIn("https://www.faceit.com/en/players/player_one", repr(admin_view["players"]))
+
+                invalid_status, _ = handler.update_player_profile(
+                    {"steam_url": "https://not-steam.example/profile", "faceit_url": ""},
+                    {"id": 1001},
+                )
+                self.assertEqual(invalid_status, 400)
+                self.assertEqual(
+                    handler.get_player_profile({"id": 1001})["profile"]["steam_url"],
+                    captain_profile["steam_url"],
+                )
+
     def test_sqlite_schema_initializes_and_enforces_case_insensitive_tags(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             database = Path(temporary_directory) / "tournament.sqlite3"

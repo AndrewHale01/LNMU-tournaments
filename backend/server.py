@@ -133,6 +133,12 @@ def initialize_database():
                 expires_at TEXT,
                 lifted_at TEXT
             );
+            CREATE TABLE IF NOT EXISTS player_profiles (
+                telegram_user_id BIGINT PRIMARY KEY,
+                steam_url TEXT NOT NULL DEFAULT '',
+                faceit_url TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            );
             CREATE UNIQUE INDEX IF NOT EXISTS teams_tag_unique_ci ON teams (lower(tag));
             CREATE INDEX IF NOT EXISTS team_players_invited_username_ci ON team_players (lower(invited_username));
             CREATE INDEX IF NOT EXISTS team_players_telegram_id_idx ON team_players (telegram_user_id);
@@ -416,6 +422,10 @@ class APIHandler(BaseHTTPRequestHandler):
             user = self.require_telegram_user()
             if user:
                 self.send_json(200, self.get_player_status(user))
+        elif path == "/api/player/profile":
+            user = self.require_telegram_user()
+            if user:
+                self.send_json(200, self.get_player_profile(user))
         else:
             self.send_json(404, {"error": "Маршрут не знайдено."})
 
@@ -435,6 +445,11 @@ class APIHandler(BaseHTTPRequestHandler):
             if not user:
                 return
             status, result = self.accept_player_invitation(payload, user)
+        elif path == "/api/player/profile":
+            user = self.require_telegram_user()
+            if not user:
+                return
+            status, result = self.update_player_profile(payload, user)
         elif path.startswith("/api/admin/"):
             user = self.require_admin()
             if not user:
@@ -623,6 +638,59 @@ class APIHandler(BaseHTTPRequestHandler):
             "expires_at": sanction["expires_at"],
         } if sanction else None}
 
+    def get_player_profile(self, user):
+        with connect_db() as connection:
+            row = connection.execute(
+                """
+                SELECT steam_url, faceit_url FROM player_profiles
+                WHERE telegram_user_id = ?
+                """,
+                (user["id"],),
+            ).fetchone()
+            teammates = [
+                dict(teammate)
+                for teammate in connection.execute(
+                    """
+                    SELECT DISTINCT p.id, p.username, t.name AS team_name, t.tag AS team_tag,
+                           COALESCE(profile.steam_url, '') AS steam_url,
+                           COALESCE(profile.faceit_url, '') AS faceit_url
+                    FROM team_players own
+                    JOIN teams t ON t.id = own.team_id AND t.status = 'approved'
+                    JOIN team_players p ON p.team_id = own.team_id
+                        AND p.status = 'active' AND p.telegram_user_id != own.telegram_user_id
+                    LEFT JOIN player_profiles profile ON profile.telegram_user_id = p.telegram_user_id
+                    WHERE own.telegram_user_id = ? AND own.status = 'active'
+                    ORDER BY team_name, p.username
+                    """,
+                    (user["id"],),
+                )
+            ]
+        return {
+            "profile": dict(row) if row else {"steam_url": "", "faceit_url": ""},
+            "teammates": teammates,
+        }
+
+    def update_player_profile(self, payload, user):
+        try:
+            steam_url = self.clean_player_profile_url(payload, "steam_url")
+            faceit_url = self.clean_player_profile_url(payload, "faceit_url")
+            updated_at = datetime.now(timezone.utc).isoformat()
+            with connect_db() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO player_profiles (telegram_user_id, steam_url, faceit_url, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT (telegram_user_id) DO UPDATE SET
+                        steam_url = excluded.steam_url,
+                        faceit_url = excluded.faceit_url,
+                        updated_at = excluded.updated_at
+                    """,
+                    (user["id"], steam_url, faceit_url, updated_at),
+                )
+            return 200, {"profile": {"steam_url": steam_url, "faceit_url": faceit_url}}
+        except ValueError as error:
+            return error_response(str(error))
+
     def get_player_invitations(self, user):
         username = (user.get("username") or "").strip().lstrip("@").lower()
         with connect_db() as connection:
@@ -722,9 +790,12 @@ class APIHandler(BaseHTTPRequestHandler):
                 for row in connection.execute(
                     """
                     SELECT p.id, p.team_id, p.telegram_user_id, p.invited_username, p.username,
-                           p.status, p.is_captain, t.name AS team_name, t.tag AS team_tag
+                           p.status, p.is_captain, t.name AS team_name, t.tag AS team_tag,
+                           COALESCE(profile.steam_url, '') AS steam_url,
+                           COALESCE(profile.faceit_url, '') AS faceit_url
                     FROM team_players p
                     JOIN teams t ON t.id = p.team_id
+                    LEFT JOIN player_profiles profile ON profile.telegram_user_id = p.telegram_user_id
                     ORDER BY t.id DESC, p.is_captain DESC, p.id
                     """
                 )
@@ -938,6 +1009,41 @@ class APIHandler(BaseHTTPRequestHandler):
         if len(value) > 2_048 or parsed_url.scheme not in ("http", "https") or not parsed_url.netloc:
             raise ValueError("Вкажи посилання на логотип або завантаж зображення PNG, JPEG чи WebP.")
         return value
+
+    @staticmethod
+    def clean_player_profile_url(payload, field):
+        value = APIHandler.clean_string(payload, field, 2_048, required=False)
+        if not value:
+            return ""
+        field_label = "Steam" if field == "steam_url" else "FACEIT"
+        if any(ord(character) < 32 or character.isspace() for character in value):
+            raise ValueError(f"Вкажи коректне HTTPS-посилання на профіль {field_label}.")
+
+        parsed_url = urlparse(value)
+        allowed_hosts = {
+            "steam_url": {"steamcommunity.com", "www.steamcommunity.com"},
+            "faceit_url": {"faceit.com", "www.faceit.com"},
+        }
+        host = (parsed_url.hostname or "").lower()
+        if (
+            parsed_url.scheme.lower() != "https"
+            or parsed_url.netloc.lower() not in allowed_hosts[field]
+            or host not in allowed_hosts[field]
+            or parsed_url.query
+            or parsed_url.fragment
+        ):
+            raise ValueError(f"Вкажи коректне HTTPS-посилання на профіль {field_label}.")
+
+        path = parsed_url.path.rstrip("/")
+        if field == "steam_url":
+            valid_path = re.fullmatch(r"/(?:profiles/\d{17}|id/[A-Za-z0-9_-]{1,64})", path)
+            canonical_host = "steamcommunity.com"
+        else:
+            valid_path = re.fullmatch(r"/[a-z]{2}/players/[A-Za-z0-9_.-]{1,64}", path, flags=re.IGNORECASE)
+            canonical_host = "www.faceit.com"
+        if not valid_path:
+            raise ValueError(f"Вкажи коректне посилання саме на профіль {field_label}.")
+        return f"https://{canonical_host}{path}"
 
     def review_team(self, team_id, decision, tournament_id=None):
         new_status = "approved" if decision == "approve" else "rejected"

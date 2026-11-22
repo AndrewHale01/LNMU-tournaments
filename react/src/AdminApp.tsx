@@ -41,6 +41,8 @@ type AdminPlayer = {
   is_captain: number;
   team_name: string;
   team_tag: string;
+  steam_url: string;
+  faceit_url: string;
 };
 
 type PlayerSanction = {
@@ -498,6 +500,12 @@ function AdminPlayerRow({
           <code>Telegram ID: {player.telegram_user_id}</code>
         ) : (
           <small>Запрошення очікує підтвердження</small>
+        )}
+        {(player.steam_url || player.faceit_url) && (
+          <span className="admin-player-links">
+            {player.steam_url && <a href={player.steam_url} target="_blank" rel="noopener noreferrer">Steam профіль</a>}
+            {player.faceit_url && <a href={player.faceit_url} target="_blank" rel="noopener noreferrer">FACEIT профіль</a>}
+          </span>
         )}
       </div>
       {player.telegram_user_id && (

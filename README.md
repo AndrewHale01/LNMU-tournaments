@@ -1,4 +1,4 @@
-# PROFCOM LNMU — CS2 Tournament Series
+# PROFCOM LNMU — CS2 & Dota 2 Community
 
 React + Vite public frontend with a separate admin entry page, Bootstrap Icons, and a Python API. The frontend can be published on GitHub Pages, while the API uses PostgreSQL on Supabase. SQLite remains available for local development.
 
