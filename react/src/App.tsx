@@ -325,7 +325,7 @@ function HomePage({
   return (
     <>
       <section className="welcome">
-        <span className="eyebrow">УКРАЇНСЬКА CS2-СПІЛЬНОТА ЛНМУ</span>
+        <span className="eyebrow">УКРАЇНСЬКА CS2-DOTA2-СПІЛЬНОТА ЛНМУ</span>
         <h1>Час грати.</h1>
         <p>Турніри, команди та матчі — все в одному місці для медиків.</p>
       </section>
@@ -360,7 +360,7 @@ function TournamentsPage({ tournaments, onOpen }: { tournaments: TournamentListI
 
   return (
     <>
-      <PageTitle eyebrow="PROFCOM LNMU · CS2" title="Турніри" />
+      <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA2" title="Турніри" />
       <div className="tournament-period-tabs" role="group" aria-label="Категорії турнірів">
         {groups.map((group) => {
           const count = tournaments.filter((item) => item.period === group.id).length;
@@ -430,7 +430,7 @@ function TournamentPage({ overview, onBack, onRegister }: { overview: Overview; 
       <button className="text-button tournament-back" onClick={onBack}><i className="bi bi-arrow-left" /> До всіх турнірів</button>
       {!tournament ? <EmptyState text="Турнір не знайдено." /> : (
         <>
-          <PageTitle eyebrow="PROFCOM LNMU · CS2" title={tournament.name} />
+          <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA2" title={tournament.name} />
           <TournamentSummary tournament={tournament} slotsLeft={slotsLeft} onRegister={onRegister} />
           <section className="content-section">
             <SectionHeading title="Деталі турніру" />
@@ -456,7 +456,7 @@ function TournamentPage({ overview, onBack, onRegister }: { overview: Overview; 
           {tournament.format !== "playoff" && (
             <section className="content-section">
               <SectionHeading title="Таблиця груп" />
-              <StandingsTable standings={overview.standings} />
+              <StandingsTable standings={overview.standings} />0
             </section>
           )}
           {tournament.format !== "groups" && (
@@ -495,7 +495,7 @@ function MatchCard({ match }: { match: Match }) {
 function RulesPage() {
   return (
     <>
-      <PageTitle eyebrow="PROFCOM LNMU · CS2" title="Правила" />
+      <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA2" title="Правила" />
       <section className="content-section first-section">
         <p className="rules-intro">Основні умови участі в турнірах PROFCOM LNMU.</p>
         <div className="rules-list">
@@ -615,7 +615,7 @@ function ProfilePage({ isAdmin, user }: { isAdmin: boolean; user: TelegramUser |
 
   return (
     <>
-      <PageTitle eyebrow="PROFCOM LNMU · CS2" title="Профіль" />
+      <PageTitle eyebrow="PROFCOM LNMU · CS2 · DOTA2" title="Профіль" />
       <section className="profile-card">
         <div className="profile-identity">
           <span className={`profile-avatar ${user?.photo_url ? "has-photo" : ""}`}>
