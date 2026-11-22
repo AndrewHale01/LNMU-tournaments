@@ -230,7 +230,7 @@ function App() {
           <span className="brand-icon"><i className="bi bi-crosshair2" /></span>
           <span>PROFCOM <b>LNMU</b></span>
         </button>
-        <span className="game-label">{selectedTournament?.tournament?.name || tournament?.name ? `CS2 · ${selectedTournament?.tournament?.name ?? tournament?.name}` : "CS2 · ТУРНІРИ"}</span>
+        <span className="game-label">{selectedTournament?.tournament?.name || tournament?.name ? `CS2 · ${selectedTournament?.tournament?.name ?? tournament?.name}` : "CS2 · DOTA2 · ТУРНІРИ"}</span>
       </header>
 
       <main className="app-content">
@@ -631,7 +631,7 @@ function ProfilePage({ isAdmin, user }: { isAdmin: boolean; user: TelegramUser |
         {user ? (
           <div className="profile-details">
             {user.username && <DetailRow icon="bi-at" label="TELEGRAM" value={`@${user.username}`} />}
-            <DetailRow icon="bi-controller" label="СПІЛЬНОТА" value="PROFCOM LNMU · CS2" />
+            <DetailRow icon="bi-controller" label="СПІЛЬНОТА" value="https://t.me/lnmu_profcom" />
           </div>
         ) : (
           <p className="profile-note">Відкрий цей застосунок через Telegram, щоб побачити дані свого профілю.</p>
