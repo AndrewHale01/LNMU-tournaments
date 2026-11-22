@@ -252,9 +252,7 @@ function App() {
           <HomePage
             overview={overview}
             slotsLeft={homeSlotsLeft}
-            onNavigate={setActiveTab}
             onOpenTournament={() => tournament && openTournament(tournament.id)}
-            onViewAll={() => setActiveTab("tournaments")}
           />
         )}
         {activeTab === "tournaments" && (
@@ -322,15 +320,11 @@ function App() {
 function HomePage({
   overview,
   slotsLeft,
-  onNavigate,
   onOpenTournament,
-  onViewAll,
 }: {
   overview: Overview;
   slotsLeft: number;
-  onNavigate: (tab: Tab) => void;
   onOpenTournament: () => void;
-  onViewAll: () => void;
 }) {
   const { tournament } = overview;
 
@@ -351,11 +345,6 @@ function HomePage({
       ) : (
         <EmptyState text="Найближчих турнірів поки немає." />
       )}
-      <section className="content-section">
-        <SectionHeading title="Турніри" action="Переглянути всі" onAction={onViewAll} />
-        <p className="rules-intro">Склади, групи, сітка плей-оф і розклад матчів — на сторінці кожного турніру.</p>
-        <button className="secondary-button full-width" onClick={() => onNavigate("tournaments")}>Відкрити список турнірів <i className="bi bi-chevron-right" /></button>
-      </section>
     </>
   );
 }
